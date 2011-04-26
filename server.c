@@ -61,24 +61,6 @@ struct playlist_handler {
   void *userdata;
 };
 
-struct add_tracks_data {
-  int index;
-  int num_tracks;
-  sp_track **tracks;
-};
-
-struct remove_tracks_data {
-  int index;
-  int num_tracks;
-  int *tracks;
-};
-
-struct search_data {
-  sp_session *session;
-  sp_playlist *playlist;
-  struct evhttp_request *request;
-};
-
 static void send_reply(struct evhttp_request *request,
                        int code,
                        const char *message,
