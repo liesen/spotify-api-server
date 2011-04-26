@@ -17,6 +17,7 @@
 #include <svn_diff.h>
 #include <sys/queue.h>
 
+#include "constants.h"
 #include "diff.h"
 
 // Application key
@@ -186,7 +187,7 @@ static void get_playlist(sp_playlist *playlist,
   */
 
   json_t *tracks = json_array();
-  char track_uri[64];
+  char track_uri[kTrackLinkLength];
 
   for (int i = 0; i < sp_playlist_num_tracks(playlist); i++) {
     sp_track *track = sp_playlist_track(playlist, i);

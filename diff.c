@@ -3,9 +3,8 @@
 #include <svn_diff.h>
 #include <svn_pools.h>
 
+#include "constants.h"
 
-// Length of a track uri
-static const int kTrackLinkLength = sizeof("spotify:track:58PipbkYEkKFzOowRPHF3m");
 
 struct track_tokens_t {
   sp_track **tracks;
