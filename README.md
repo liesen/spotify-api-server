@@ -28,7 +28,8 @@ An extension, `patch`, accepts a (JSON) array of track URIs and replaces all tra
 Make sure you have the required libraries
 
 * subversion (`libsvn-dev`, I think) and its dependency `libapr1`
-* libevent
+* [libevent](http://monkey.org/~provos/libevent/)
+* [jansson](http://www.digip.org/jansson/)
 
 Update `account.c` with your credentials. A *Spotify premium account is necessary*.
 
