@@ -6,7 +6,7 @@ Hopefully this will allow for more services around Spotify as it makes editing p
 
 It's a web server (listens at port 1337 by default) that talks to Spotify using libspotify. JSON is assumed as input and output.
 
-> spotify-api-server is an *experiment* with C, libspotify, evented I/O (libev).
+> spotify-api-server is an *experiment* with C, libspotify, evented I/O (libev) and GPL.
 
 
 ## Supported API methods
