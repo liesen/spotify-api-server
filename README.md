@@ -22,3 +22,11 @@ An extension, `patch`, accepts a (JSON) array of track URIs and replaces all tra
 
     POST /playlist/{id}/patch
 
+
+## How to build
+
+Make sure you have the required libraries
+
+* `subversion` (`libsvn-dev`, I think) and its dependency `libapr1`
+
+Copy `appkey.c` into the directory and run `make`.
