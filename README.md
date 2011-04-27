@@ -6,7 +6,7 @@ Hopefully this will allow for more services around Spotify as it makes editing p
 
 It's a web server (listens at port 1337 by default) that talks to Spotify using libspotify. JSON is assumed as input and output.
 
-> spotify-api-server is an *experiment* with C, libspotify, evented I/O (libev) and GPL.
+> spotify-api-server is an *experiment* with C, libspotify, evented I/O (libevent) and GPL.
 
 
 ## Supported API methods
@@ -27,6 +27,9 @@ An extension, `patch`, accepts a (JSON) array of track URIs and replaces all tra
 
 Make sure you have the required libraries
 
-* `subversion` (`libsvn-dev`, I think) and its dependency `libapr1`
+* subversion (`libsvn-dev`, I think) and its dependency `libapr1`
+* libevent
+
+Update `account.c` with your credentials. A *Spotify premium account is necessary*.
 
 Copy `appkey.c` into the directory and run `make`.
