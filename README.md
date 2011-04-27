@@ -2,6 +2,8 @@
 
 Implementation of parts of the [Spotify playlist API](https://github.com/spotify/playlist-api).
 
+Hopefully this will allow for more services around Spotify as it makes editing playlists much easier than using libspotify.
+
 It's a web server (listens at port 1337 by default) that talks to Spotify using libspotify. JSON is assumed as input and output.
 
 > spotify-api-server is an *experiment* with C, libspotify, evented I/O (libev).
