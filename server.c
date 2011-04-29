@@ -209,7 +209,7 @@ static void get_playlist(sp_playlist *playlist,
   for (int i = 0; i < sp_playlist_num_tracks(playlist); i++) {
     sp_track *track = sp_playlist_track(playlist, i);
     sp_link *track_link = sp_link_create_from_track(track, 0);
-    sp_link_as_string(track_link, track_uri, 64);
+    sp_link_as_string(track_link, track_uri, kTrackLinkLength);
     json_array_append(tracks, json_string_nocheck(track_uri));
     sp_link_release(track_link);
   }
@@ -220,7 +220,7 @@ static void get_playlist(sp_playlist *playlist,
   struct evbuffer *buf = evhttp_request_get_output_buffer(request);
   evbuffer_add(buf, json_str, strlen(json_str));
   free(json_str);
-  send_reply(request, 200, "OK", buf);
+  send_reply(request, HTTP_OK, "OK", buf);
 }
 
 static void get_playlist_collaborative(sp_playlist *playlist,
@@ -238,6 +238,77 @@ static void get_playlist_collaborative(sp_playlist *playlist,
   struct evbuffer *buf = evhttp_request_get_output_buffer(request);
   evbuffer_add(buf, json, strlen(json));
   send_reply(request, HTTP_OK, "OK", buf); 
+}
+
+static void put_playlist(sp_playlist *playlist,
+                         struct evhttp_request *request,
+                         void *userdata) {
+  // TODO(liesen): playlist there so that signatures of all handler methods are
+  // the same, but do they have to be?
+  assert(playlist == NULL);
+
+  sp_session *session = userdata;
+  struct evbuffer *buf = evhttp_request_get_input_buffer(request);
+  size_t buflen = evbuffer_get_length(buf);
+
+  if (buflen == 0) {
+    send_error(request, HTTP_BADREQUEST, "No body");
+    return;
+  }
+
+  // Read request body
+  char *request_body = calloc(buflen + 1, sizeof (char));
+  strncpy(request_body, evbuffer_pullup(buf, buflen), buflen);
+  request_body[buflen] = '\0';
+
+  // Parse JSON
+  json_error_t loads_error;
+  json_t *playlist_json = json_loads(request_body, &loads_error);
+  free(request_body);
+
+  if (playlist_json == NULL) {
+    send_error(request, HTTP_BADREQUEST,
+               loads_error.text ? loads_error.text : "Unable to parse JSON");
+    return;
+  }
+
+  // Parse playlist
+  if (!json_is_object(playlist_json)) {
+    send_error(request, HTTP_BADREQUEST, "Invalid playlist object");
+    return;
+  }
+
+  // Get title
+  json_t *title_json = json_object_get(playlist_json, "title");
+
+  if (title_json == NULL) {
+    json_decref(playlist_json);
+    send_error(request, HTTP_BADREQUEST,
+               "Invalid playlist: title is missing");
+    return;
+  }
+
+  if (!json_is_string(title_json)) {
+    json_decref(playlist_json);
+    send_error(request, HTTP_BADREQUEST,
+               "Invalid playlist: title is not a string");
+    return;
+  }
+
+  char title[kMaxPlaylistTitleLength];
+  strncpy(title, json_string_value(title_json), kMaxPlaylistTitleLength);
+  json_decref(playlist_json);
+
+  // Add new playlist
+  sp_playlistcontainer *pc = sp_session_playlistcontainer(session);
+  playlist = sp_playlistcontainer_add_new_playlist(pc, title);
+
+  if (playlist == NULL) {
+    send_error(request, 500, "Unable to create playlist");
+  } else {
+    register_playlist_callbacks(playlist, request, &get_playlist,
+                                &playlist_state_changed_callbacks, NULL);
+  }
 }
 
 static void put_playlist_add_tracks(sp_playlist *playlist,
@@ -572,8 +643,7 @@ static void handle_request(struct evhttp_request *request,
       case EVHTTP_REQ_PUT:
       case EVHTTP_REQ_POST:
         // TODO(liesen): Add code to create playlists
-        // request_callback = &put_playlist_create;
-        not_implemented(NULL, request, NULL);
+        put_playlist(NULL, request, session);
         break;
 
       default:
@@ -658,10 +728,18 @@ static void handle_request(struct evhttp_request *request,
   } 
 }
 
+static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata);
+
+static sp_playlistcontainer_callbacks playlistcontainer_callbacks = {
+  .container_loaded = playlistcontainer_loaded
+};
+
 static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
   fprintf(stderr, "playlistcontainer_loaded\n");
   sp_session *session = userdata;
   struct state *state = sp_session_userdata(session);
+
+  sp_playlistcontainer_remove_callbacks(pc, &playlistcontainer_callbacks, session);
 
   state->http = evhttp_new(state->event_base);
   evhttp_set_timeout(state->http, 60);
@@ -673,10 +751,6 @@ static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
     sp_session_logout(session);
   }
 }
-
-static sp_playlistcontainer_callbacks playlistcontainer_callbacks = {
-  .container_loaded = playlistcontainer_loaded
-};
 
 // Catches SIGINT and exits gracefully
 static void sigint_handler(evutil_socket_t socket,
