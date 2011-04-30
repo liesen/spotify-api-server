@@ -36,6 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "constants.h"
 #include "diff.h"
+#include "json.h"
 
 // Application key
 extern const unsigned char g_appkey[]; 
@@ -88,18 +89,26 @@ static void send_reply(struct evhttp_request *request,
   evhttp_send_reply(request, code, message, buf);
 }
 
+// Sends JSON to the client (also `free`s the JSON object)
+static void send_reply_json(struct evhttp_request *request,
+                            int code,
+                            const char *message,
+                            json_t *json) {
+  struct evbuffer *buf = evhttp_request_get_output_buffer(request);
+  char *json_str = json_dumps(json, JSON_COMPACT);
+  json_decref(json);
+  evbuffer_add(buf, json_str, strlen(json_str));
+  free(json_str);
+  send_reply(request, code, message, buf);
+}
+
 // Will wrap an error message in a JSON object before sending it
 static void send_error(struct evhttp_request *request,
                        int code,
                        const char *message) {
   json_t *error_object = json_object();
-  json_object_set(error_object, "message", json_string(message));
-  struct evbuffer *buf = evhttp_request_get_output_buffer(request);
-  char *error = json_dumps(error_object, JSON_COMPACT);
-  json_decref(error_object);
-  evbuffer_add(buf, error, strlen(error));
-  send_reply(request, code, message, buf);
-  free(error);
+  json_object_set_new(error_object, "message", json_string(message));
+  send_reply_json(request, code, message, error_object);
 }
 
 static void send_error_sp(struct evhttp_request *request,
@@ -169,75 +178,50 @@ static void get_playlist(sp_playlist *playlist,
                          void *userdata) {
   json_t *json = json_object();
 
-  // URI
-  sp_link *playlist_link = sp_link_create_from_playlist(playlist);
-  char playlist_uri[64];
-  sp_link_as_string(playlist_link, playlist_uri, 64);
-  sp_link_release(playlist_link);
-  json_object_set_new(json, "uri", json_string_nocheck(playlist_uri));
-
-  // Title
-  json_object_set_new(json, "title",
-                      json_string_nocheck(sp_playlist_name(playlist)));
-
-  // Creator
-  sp_user *owner = sp_playlist_owner(playlist);
-  const char *username = sp_user_display_name(owner);
-  sp_user_release(owner);
-  json_object_set_new(json, "creator", json_string_nocheck(username));
-
-  // Collaborative
-  json_object_set_new(json, "collaborative",
-                      sp_playlist_is_collaborative(playlist) ? json_true()
-                                                             : json_false());
-
-  /*
-  // Image
-  byte image[20];
-
-  if (sp_playlist_get_image(playlist, image)) {
-    json_t *image_array = json_array();
-    for (int i = 0; i < 20; i++) 
-      json_array_append(image_array, json_integer((int) image[i]));
-    json_object_set(json, "image", image_array);
-  }
-  */
-
-  json_t *tracks = json_array();
-  char track_uri[kTrackLinkLength];
-
-  for (int i = 0; i < sp_playlist_num_tracks(playlist); i++) {
-    sp_track *track = sp_playlist_track(playlist, i);
-    sp_link *track_link = sp_link_create_from_track(track, 0);
-    sp_link_as_string(track_link, track_uri, kTrackLinkLength);
-    json_array_append(tracks, json_string_nocheck(track_uri));
-    sp_link_release(track_link);
+  if (playlist_to_json(playlist, json) == NULL) {
+    json_decref(json);
+    send_error(request, 500, "");
+    return;
   }
 
-  json_object_set(json, "tracks", tracks);
-  char *json_str = json_dumps(json, JSON_COMPACT);
-  json_decref(json);
-  struct evbuffer *buf = evhttp_request_get_output_buffer(request);
-  evbuffer_add(buf, json_str, strlen(json_str));
-  free(json_str);
-  send_reply(request, HTTP_OK, "OK", buf);
+  send_reply_json(request, HTTP_OK, "OK", json);
 }
 
 static void get_playlist_collaborative(sp_playlist *playlist,
                                        struct evhttp_request *request,
                                        void *userdata) {
   assert(sp_playlist_is_loaded(playlist));
+  json_t *json = json_object();
+  playlist_to_json_set_collaborative(playlist, json);
+  send_reply_json(request, HTTP_OK, "OK", json);
+}
 
-  bool is_collaborative = sp_playlist_is_collaborative(playlist);
-  sp_playlist_release(playlist);
+// Reads JSON from the requests body. Returns NULL on any error.
+static json_t *read_request_body_json(struct evhttp_request *request,
+                                      json_error_t *error) {
+  struct evbuffer *buf = evhttp_request_get_input_buffer(request);
+  size_t buflen = evbuffer_get_length(buf);
 
-  json_t *result = json_object();
-  json_object_set_new(result, "collaborative",
-                      is_collaborative ? json_true() : json_false());
-  char *json = json_dumps(result, JSON_COMPACT);
-  struct evbuffer *buf = evhttp_request_get_output_buffer(request);
-  evbuffer_add(buf, json, strlen(json));
-  send_reply(request, HTTP_OK, "OK", buf); 
+  if (buflen == 0)
+    return NULL;
+
+  // Read body
+  char *body = malloc(buflen + 1);
+
+  if (body == NULL)
+    return NULL; // TODO(liesen): Handle memory alloc fail
+
+  if (evbuffer_remove(buf, body, buflen) == -1) {
+    free(body);
+    return NULL;
+  }
+
+  body[buflen] = '\0';
+
+  // Parse JSON
+  json_t *json = json_loads(body, 0, error);
+  free(body);
+  return json;
 }
 
 static void put_playlist(sp_playlist *playlist,
@@ -248,23 +232,8 @@ static void put_playlist(sp_playlist *playlist,
   assert(playlist == NULL);
 
   sp_session *session = userdata;
-  struct evbuffer *buf = evhttp_request_get_input_buffer(request);
-  size_t buflen = evbuffer_get_length(buf);
-
-  if (buflen == 0) {
-    send_error(request, HTTP_BADREQUEST, "No body");
-    return;
-  }
-
-  // Read request body
-  char *request_body = calloc(buflen + 1, sizeof (char));
-  strncpy(request_body, evbuffer_pullup(buf, buflen), buflen);
-  request_body[buflen] = '\0';
-
-  // Parse JSON
   json_error_t loads_error;
-  json_t *playlist_json = json_loads(request_body, 0, &loads_error);
-  free(request_body);
+  json_t *playlist_json = read_request_body_json(request, &loads_error);
 
   if (playlist_json == NULL) {
     send_error(request, HTTP_BADREQUEST,
@@ -329,23 +298,9 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
     return;
   }
 
-  struct evbuffer *buf = evhttp_request_get_input_buffer(request);
-  size_t buflen = evbuffer_get_length(buf);
-
-  if (buflen == 0) {
-    send_error(request, HTTP_BADREQUEST, "No body");
-    return;
-  }
-
-  // Read request body
-  char *request_body = calloc(buflen + 1, sizeof (char));
-  strncpy(request_body, evbuffer_pullup(buf, buflen), buflen);
-  request_body[buflen] = '\0';
-
   // Parse JSON
   json_error_t loads_error;
-  json_t *json = json_loads(request_body, 0, &loads_error);
-  free(request_body);
+  json_t *json = read_request_body_json(request, &loads_error);
 
   if (json == NULL) {
     send_error(request, HTTP_BADREQUEST,
@@ -491,14 +446,8 @@ static void put_playlist_patch(sp_playlist *playlist,
   }
 
   // Read request body
-  char *request_body = calloc(buflen + 1, sizeof (char));
-  strncpy(request_body, evbuffer_pullup(buf, buflen), buflen);
-  request_body[buflen] = '\0';
-
-  // Parse JSON
   json_error_t loads_error;
-  json_t *json = json_loads(request_body, 0, &loads_error);
-  free(request_body);
+  json_t *json = read_request_body_json(request, &loads_error);
 
   if (json == NULL) {
     send_error(request, HTTP_BADREQUEST,

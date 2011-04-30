@@ -1,0 +1,90 @@
+#include <assert.h>
+#include <jansson.h>
+#include <libspotify/api.h>
+#include <string.h>
+
+#include "constants.h"
+
+json_t *track_to_json(sp_track *track, json_t *object) {
+  char uri[kTrackLinkLength];
+  sp_link *link = sp_link_create_from_track(track, 0);
+  sp_link_as_string(link, uri, kTrackLinkLength);
+  sp_link_release(link);
+
+  json_object_set_new(object, "uri", json_string_nocheck(uri)); 
+
+  if (!sp_track_is_loaded(track))
+    return object;
+
+  const char *name = sp_track_name(track);
+  json_object_set_new(object, "title", json_string_nocheck(name)); 
+
+  return object;
+}
+
+json_t *playlist_to_json_set_collaborative(sp_playlist *playlist,
+                                           json_t *object) {
+  bool collaborative = sp_playlist_is_collaborative(playlist);
+  json_object_set_new(object, "collaborative",
+                      collaborative ? json_true() : json_false());
+  return object;
+}
+
+json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
+  assert(sp_playlist_is_loaded(playlist));
+
+  // Owner
+  sp_user *owner = sp_playlist_owner(playlist);
+  const char *username = sp_user_display_name(owner);
+  sp_user_release(owner);
+  json_object_set_new_nocheck(object, "creator",
+                              json_string_nocheck(username));
+
+  // URI
+  size_t playlist_uri_len = strlen("spotify:user:") + strlen(username) + 
+                            strlen(":playlist:") +
+                            strlen("284on3DVWeAxWkgVuzZKGt");
+  char *playlist_uri = malloc(playlist_uri_len);
+
+  if (playlist_uri == NULL) {
+    return NULL;
+  }
+
+  sp_link *playlist_link = sp_link_create_from_playlist(playlist);
+  sp_link_as_string(playlist_link, playlist_uri, playlist_uri_len);
+  sp_link_release(playlist_link);
+  json_object_set_new(object, "uri", 
+                      json_string_nocheck(playlist_uri));
+  free(playlist_uri);
+
+  // Title
+  const char *title = sp_playlist_name(playlist);
+  json_object_set_new(object, "title",
+                      json_string_nocheck(title));
+
+  // Collaborative
+  playlist_to_json_set_collaborative(playlist, object);
+
+  // Description
+  const char *description = sp_playlist_get_description(playlist);
+
+  if (description != NULL) {
+    json_object_set_new(object, "description",
+                        json_string_nocheck(description));
+  }
+
+  // Tracks
+  json_t *tracks = json_array();
+  json_object_set_new(object, "tracks", tracks);
+  char track_uri[kTrackLinkLength];
+
+  for (int i = 0; i < sp_playlist_num_tracks(playlist); i++) {
+    sp_track *track = sp_playlist_track(playlist, i);
+    sp_link *track_link = sp_link_create_from_track(track, 0);
+    sp_link_as_string(track_link, track_uri, kTrackLinkLength);
+    json_array_append(tracks, json_string_nocheck(track_uri));
+    sp_link_release(track_link);
+  }
+
+  return object;
+}
