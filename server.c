@@ -263,7 +263,7 @@ static void put_playlist(sp_playlist *playlist,
 
   // Parse JSON
   json_error_t loads_error;
-  json_t *playlist_json = json_loads(request_body, &loads_error);
+  json_t *playlist_json = json_loads(request_body, 0, &loads_error);
   free(request_body);
 
   if (playlist_json == NULL) {
@@ -344,7 +344,7 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
 
   // Parse JSON
   json_error_t loads_error;
-  json_t *json = json_loads(request_body, &loads_error);
+  json_t *json = json_loads(request_body, 0, &loads_error);
   free(request_body);
 
   if (json == NULL) {
@@ -497,7 +497,7 @@ static void put_playlist_patch(sp_playlist *playlist,
 
   // Parse JSON
   json_error_t loads_error;
-  json_t *json = json_loads(request_body, &loads_error);
+  json_t *json = json_loads(request_body, 0, &loads_error);
   free(request_body);
 
   if (json == NULL) {

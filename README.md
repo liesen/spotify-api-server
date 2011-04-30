@@ -29,7 +29,7 @@ Make sure you have the required libraries
 
 * subversion (`libsvn-dev`, I think) and its dependency `libapr1`
 * [libevent](http://monkey.org/~provos/libevent/)
-* [jansson](http://www.digip.org/jansson/)
+* [jansson](http://www.digip.org/jansson/) > 2.0
 
 Update `account.c` with your credentials. A *Spotify premium account is necessary*.
 
