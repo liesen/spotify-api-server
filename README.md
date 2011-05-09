@@ -11,16 +11,17 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 
 ## Supported API methods
 
-    GET /playlist/{id}
-    GET /playlist/{id}/collaborative
+    GET /playlist/{id} -> <playlist>
+    GET /playlist/{id}/collaborative -> {collaborative:<'true' | 'false'>}
 
-    POST /playlist/{id}/add
-    POST /playlist/{id}/remove
-    POST /playlist/{id}/collaborative
+    POST /playlist <- {title:<string>} -> <playlist>
+    POST /playlist/{id}/add?index <- [<track URI>] -> <playlist>
+    POST /playlist/{id}/remove?index&count -> <playlist>
+    POST /playlist/{id}/collaborative?enabled=<'true' | 'false'> -> <playlist>
 
 An extension, `patch`, accepts a (JSON) array of track URIs and replaces all tracks in a playlist with those tracks. It's a bit smarter than `add`/`remove` in that it performs a *diff* between the playlist and the new tracks.
 
-    POST /playlist/{id}/patch
+    POST /playlist/{id}/patch <- [<track URI>] -> <playlist>
 
 
 ## How to build
