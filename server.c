@@ -20,6 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <event2/buffer.h>
 #include <event2/event.h>
 #include <event2/http.h>
+#include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
 #include <event2/thread.h>
 #include <event2/util.h>
@@ -194,6 +195,21 @@ static void get_playlist_collaborative(sp_playlist *playlist,
   json_t *json = json_object();
   playlist_to_json_set_collaborative(playlist, json);
   send_reply_json(request, HTTP_OK, "OK", json);
+}
+
+static void get_playlist_subscribers(sp_playlist *playlist,
+                                     struct evhttp_request *request,
+                                     void *userdata) {
+  assert(sp_playlist_is_loaded(playlist));
+  sp_subscribers *subscribers = sp_playlist_subscribers(playlist);
+  json_t *array = json_array();
+
+  for (int i = 0; i < subscribers->count; i++) {
+    char *subscriber = subscribers->subscribers[i];
+    json_array_append_new(array, json_string(subscriber));
+  }
+
+  send_reply_json(request, HTTP_OK, "OK", array);
 }
 
 // Reads JSON from the requests body. Returns NULL on any error.
@@ -555,6 +571,7 @@ static void put_playlist_patch(sp_playlist *playlist,
 // Request dispatcher
 static void handle_request(struct evhttp_request *request,
                             void *userdata) {
+  evhttp_connection_set_timeout(request->evcon, 1);
   evhttp_add_header(evhttp_request_get_output_headers(request),
                     "Server", "johan@liesen.se/spotify-api-server");
 
@@ -607,7 +624,7 @@ static void handle_request(struct evhttp_request *request,
   sp_link *playlist_link = sp_link_create_from_string(playlist_uri);
 
   if (playlist_link == NULL) {
-    send_error(request, HTTP_NOTFOUND, "Link not found");
+    send_error(request, HTTP_NOTFOUND, "Playlist link not found");
     free(uri);
     return;
   }
@@ -646,6 +663,8 @@ static void handle_request(struct evhttp_request *request,
         request_callback = &get_playlist;
       } else if (strncmp(action, "collaborative", 13) == 0) {
         request_callback = &get_playlist_collaborative;
+      } else if (strncmp(action, "subscribers", 11) == 0) {
+        request_callback = &get_playlist_subscribers;
       }
     }
     break;

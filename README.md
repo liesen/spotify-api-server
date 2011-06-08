@@ -13,6 +13,7 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 
     GET /playlist/{id} -> <playlist>
     GET /playlist/{id}/collaborative -> {collaborative:<'true' | 'false'>}
+    GET /playlist/{id}/subscribers -> [<string>]
 
     POST /playlist <- {title:<string>} -> <playlist>
     POST /playlist/{id}/add?index <- [<track URI>] -> <playlist>
@@ -28,7 +29,7 @@ An extension, `patch`, accepts a (JSON) array of track URIs and replaces all tra
 
 Make sure you have the required libraries
 
-* subversion (`libsvn-dev`, I think) and its dependency `libapr1`
+* subversion (`libsvn-dev`) and its dependency `libapr1`
 * [libevent](http://monkey.org/~provos/libevent/)
 * [jansson](http://www.digip.org/jansson/) > 2.0
 

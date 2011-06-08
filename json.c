@@ -18,7 +18,6 @@ json_t *track_to_json(sp_track *track, json_t *object) {
 
   const char *name = sp_track_name(track);
   json_object_set_new(object, "title", json_string_nocheck(name)); 
-
   return object;
 }
 
@@ -72,6 +71,11 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
     json_object_set_new(object, "description",
                         json_string_nocheck(description));
   }
+
+  // Number of subscribers
+  int num_subscribers = sp_playlist_num_subscribers(playlist);
+  json_object_set_new(object, "subscriberCount",
+                      json_integer(num_subscribers));
 
   // Tracks
   json_t *tracks = json_array();
