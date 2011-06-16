@@ -39,6 +39,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "diff.h"
 #include "json.h"
 
+#define HTTP_ERROR 500
+#define HTTP_NOTIMPL 501
+
 // Application key
 extern const unsigned char g_appkey[]; 
 extern const size_t g_appkey_size; 
@@ -84,10 +87,18 @@ struct playlist_handler {
 static void send_reply(struct evhttp_request *request,
                        int code,
                        const char *message,
-                       struct evbuffer *buf) {
+                       struct evbuffer *body) {
   evhttp_add_header(evhttp_request_get_output_headers(request),
                     "Content-type", "application/json; charset=UTF-8");
-  evhttp_send_reply(request, code, message, buf);
+  bool empty_body = body == NULL;
+
+  if (empty_body)
+    body = evbuffer_new();
+
+  evhttp_send_reply(request, code, message, body);
+
+  if (empty_body)
+    evbuffer_free(body);
 }
 
 // Sends JSON to the client (also `free`s the JSON object)
@@ -166,11 +177,11 @@ static sp_playlist_callbacks playlist_update_in_progress_callbacks = {
 
 // HTTP handlers
 
-// Standard response handler: 500 Not Implemented
+// Standard response handler
 static void not_implemented(sp_playlist *playlist,
                             struct evhttp_request *request,
                             void *userdata) {
-  evhttp_send_error(request, 500, "Not Implemented");
+  evhttp_send_error(request, HTTP_NOTIMPL, "Not Implemented");
 }
 
 // Responds with an entire playlist
@@ -181,7 +192,7 @@ static void get_playlist(sp_playlist *playlist,
 
   if (playlist_to_json(playlist, json) == NULL) {
     json_decref(json);
-    send_error(request, 500, "");
+    send_error(request, HTTP_ERROR, "");
     return;
   }
 
@@ -240,6 +251,82 @@ static json_t *read_request_body_json(struct evhttp_request *request,
   return json;
 }
 
+static void inbox_post_complete(sp_inbox *inbox, void *userdata) {
+  struct evhttp_request *request = userdata;
+  sp_error inbox_error = sp_inbox_error(inbox);
+  sp_inbox_release(inbox);
+
+  switch (inbox_error) {
+    case SP_ERROR_OK:
+      send_reply(request, HTTP_OK, "OK", NULL);
+      break;
+
+    case SP_ERROR_NO_SUCH_USER:
+      send_error_sp(request, HTTP_NOTFOUND, inbox_error);
+      break;
+
+    default:
+      send_error_sp(request, HTTP_ERROR, inbox_error);
+      break;
+  }
+}
+
+static void put_user_inbox(const char *user,
+                           struct evhttp_request *request,
+                           void *userdata) {
+  json_error_t loads_error;
+  json_t *json = read_request_body_json(request, &loads_error);
+
+  if (json == NULL) {
+    send_error(request, HTTP_BADREQUEST,
+        loads_error.text ? loads_error.text : "Unable to parse JSON");
+    return;
+  }
+
+  if (!json_is_object(json)) {
+    json_decref(json);
+    send_error(request, HTTP_BADREQUEST, "Not valid JSON object");
+    return;
+  }
+
+  json_t *tracks_json = json_object_get(json, "tracks");
+
+  if (!json_is_array(tracks_json)) {
+    json_decref(tracks_json);
+    send_error(request, HTTP_BADREQUEST, "tracks is not valid JSON array");
+    return;
+  }
+
+  // Handle empty array
+  int num_tracks = json_array_size(tracks_json);
+
+  if (num_tracks == 0) {
+    send_reply(request, HTTP_OK, "OK", NULL);
+    return;
+  }
+
+  sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
+  int num_valid_tracks = json_to_tracks(tracks_json, tracks, num_tracks);
+
+  if (num_valid_tracks == 0) {
+    send_error(request, HTTP_BADREQUEST, "No valid tracks");
+  } else {
+    json_t *message_json = json_object_get(json, "message");
+    sp_session *session = userdata;
+    sp_inbox *inbox = sp_inbox_post_tracks(session, user, tracks,
+        num_valid_tracks,
+        json_is_string(message_json) ? json_string_value(message_json) : "",
+        &inbox_post_complete, request);
+
+    if (inbox == NULL)
+      send_error(request, HTTP_ERROR,
+                 "Failed to initialize request to add tracks to user's inbox");
+  }
+
+  json_decref(json);
+  free(tracks);
+}
+
 static void put_playlist(sp_playlist *playlist,
                          struct evhttp_request *request,
                          void *userdata) {
@@ -289,7 +376,7 @@ static void put_playlist(sp_playlist *playlist,
   playlist = sp_playlistcontainer_add_new_playlist(pc, title);
 
   if (playlist == NULL) {
-    send_error(request, 500, "Unable to create playlist");
+    send_error(request, HTTP_ERROR, "Unable to create playlist");
   } else {
     register_playlist_callbacks(playlist, request, &get_playlist,
                                 &playlist_state_changed_callbacks, NULL);
@@ -334,43 +421,12 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
   int num_tracks = json_array_size(json);
 
   if (num_tracks == 0) {
-    struct evbuffer *buf = evbuffer_new();
-    send_reply(request, HTTP_OK, "OK", buf); 
-    evbuffer_free(buf);
+    send_reply(request, HTTP_OK, "OK", NULL);
     return;
   }
 
   const sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
-  int num_valid_tracks = 0;
-
-  for (int i = 0; i < num_tracks; i++) {
-    json_t *item = json_array_get(json, i);
-
-    if (!json_is_string(item)) {
-      json_decref(item);
-      continue;
-    }
-
-    char *uri = strdup(json_string_value(item));
-    sp_link *track_link = sp_link_create_from_string(uri);
-    free(uri);
-
-    if (track_link == NULL)
-      continue;
-
-    if (sp_link_type(track_link) != SP_LINKTYPE_TRACK) {
-      sp_link_release(track_link);
-      continue;
-    }
-
-    sp_track *track = sp_link_as_track(track_link);
-    
-    if (track == NULL)
-      continue;
-
-    tracks[num_valid_tracks++] = track;
-  }
-
+  int num_valid_tracks = json_to_tracks(json, tracks, num_tracks);
   json_decref(json);
   
   // Bail if no tracks could be read from input
@@ -380,7 +436,6 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
     return;
   }
 
-  tracks = realloc(tracks, num_valid_tracks * sizeof (sp_track *));
   struct playlist_handler *handler = register_playlist_callbacks(
       playlist, request, &get_playlist,
       &playlist_update_in_progress_callbacks, NULL);
@@ -481,9 +536,7 @@ static void put_playlist_patch(sp_playlist *playlist,
   int num_tracks = json_array_size(json);
 
   if (num_tracks == 0) {
-    struct evbuffer *buf = evbuffer_new();
-    send_reply(request, HTTP_OK, "OK", buf); 
-    evbuffer_free(buf);
+    send_reply(request, HTTP_OK, "OK", NULL);
     return;
   }
 
@@ -585,7 +638,7 @@ static void handle_request(struct evhttp_request *request,
       break;
 
     default:
-      evhttp_send_error(request, 501, "Not Implemented");
+      evhttp_send_error(request, HTTP_NOTIMPL, "Not Implemented");
       return;
   }
 
@@ -593,10 +646,51 @@ static void handle_request(struct evhttp_request *request,
   sp_session *session = state->session;
   char *uri = evhttp_decode_uri(evhttp_request_get_uri(request));
 
-  // Handle requests to /playlist/<playlist_uri>/<action>
   char *entity = strtok(uri, "/");
 
-  if (entity == NULL || strncmp(entity, "playlist", 8) != 0) {
+  if (entity == NULL) {
+    evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
+    free(uri);
+    return;
+  }
+
+  // Handle requests to /user/<user_name>/inbox
+  if (strncmp(entity, "user", 4) == 0) {
+    char *user = strtok(NULL, "/");
+
+    if (user == NULL) {
+      evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
+      free(uri);
+      return;
+    }
+
+    char *action = strtok(NULL, "/");
+
+    if (action == NULL) {
+      evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
+      free(uri);
+      return;
+    }
+
+    switch (http_method) {
+      case EVHTTP_REQ_PUT:
+      case EVHTTP_REQ_POST:
+        if (strncmp(action, "inbox", 5) == 0) {
+          put_user_inbox(user, request, session);
+        }
+        break;
+
+      default:
+        evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
+        break;
+    }
+
+    free(uri);
+    return;
+  }
+
+  // Handle requests to /playlist/<playlist_uri>/<action>
+  if (strncmp(entity, "playlist", 8) != 0) {
     evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
     free(uri);
     return;

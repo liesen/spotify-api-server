@@ -11,28 +11,34 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 
 ## Supported API methods
 
+### Playlists
+
     GET /playlist/{id} -> <playlist>
-    GET /playlist/{id}/collaborative -> {collaborative:<'true' | 'false'>}
+    GET /playlist/{id}/collaborative -> {collaborative:<boolean>}
     GET /playlist/{id}/subscribers -> [<string>]
 
     POST /playlist <- {title:<string>} -> <playlist>
     POST /playlist/{id}/add?index <- [<track URI>] -> <playlist>
     POST /playlist/{id}/remove?index&count -> <playlist>
-    POST /playlist/{id}/collaborative?enabled=<'true' | 'false'> -> <playlist>
-
-An extension, `patch`, accepts a (JSON) array of track URIs and replaces all tracks in a playlist with those tracks. It's a bit smarter than `add`/`remove` in that it performs a *diff* between the playlist and the new tracks.
-
+    POST /playlist/{id}/collaborative?enabled=<boolean> -> <playlist>
     POST /playlist/{id}/patch <- [<track URI>] -> <playlist>
 
+`patch` replaces all tracks in a playlist with as few `add`s and `remove`s as possible by first performing a *diff* between the playlist and the new tracks and then applying the changes.
+
+### Inboxes
+
+    POST /user/{user}/inbox <- {message:<string>, tracks:[<track URI>]}
+
+`message` is optional.
 
 ## How to build
 
-Make sure you have the required libraries
+1. Make sure you have the required libraries
+  * subversion (`libsvn-dev`) and its dependency, `libapr`
+  * [libevent](http://monkey.org/~provos/libevent/)
+  * [jansson](http://www.digip.org/jansson/) > 2.0
 
-* subversion (`libsvn-dev`) and its dependency `libapr1`
-* [libevent](http://monkey.org/~provos/libevent/)
-* [jansson](http://www.digip.org/jansson/) > 2.0
+1. Update `account.c` with your credentials. A *Spotify premium account is necessary*.
 
-Update `account.c` with your credentials. A *Spotify premium account is necessary*.
+1. Copy `appkey.c` into the directory and run `make`.
 
-Copy `appkey.c` into the directory and run `make`.

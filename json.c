@@ -2,6 +2,7 @@
 #include <jansson.h>
 #include <libspotify/api.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "constants.h"
 
@@ -91,4 +92,38 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
   }
 
   return object;
+}
+
+bool json_to_track(json_t *json, sp_track **track) {
+  if (!json_is_string(json))
+    return false;
+
+  sp_link *link = sp_link_create_from_string(json_string_value(json));
+
+  if (link == NULL)
+    return false;
+
+  if (sp_link_type(link) != SP_LINKTYPE_TRACK) {
+    sp_link_release(link);
+    return false;
+  }
+
+  *track = sp_link_as_track(link);
+  return *track != NULL;
+}
+
+int json_to_tracks(json_t *json, sp_track **tracks, int num_tracks) {
+  if (!json_is_array(json))
+    return 0;
+
+  int num_valid_tracks = 0;
+
+  for (int i = 0; i < num_tracks; i++) {
+    json_t *item = json_array_get(json, i);
+
+    if (json_to_track(item, &tracks[num_valid_tracks]))
+      num_valid_tracks++;
+  }
+
+  return num_valid_tracks;
 }
