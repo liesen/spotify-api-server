@@ -43,7 +43,7 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
   // URI
   size_t playlist_uri_len = strlen("spotify:user:") + strlen(username) + 
                             strlen(":playlist:") +
-                            strlen("284on3DVWeAxWkgVuzZKGt");
+                            strlen("284on3DVWeAxWkgVuzZKGt") + 1;
   char *playlist_uri = malloc(playlist_uri_len);
 
   if (playlist_uri == NULL) {
