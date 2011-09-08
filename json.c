@@ -30,7 +30,7 @@ json_t *playlist_to_json_set_collaborative(sp_playlist *playlist,
   return object;
 }
 
-json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
+json_t *playlist_to_json(sp_playlist *playlist, json_t *object, sp_session *session) {
   assert(sp_playlist_is_loaded(playlist));
 
   // Owner
@@ -79,16 +79,73 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
                       json_integer(num_subscribers));
 
   // Tracks
-  json_t *tracks = json_array();
-  json_object_set_new(object, "tracks", tracks);
+  json_t *tracks_object = json_array();
+  json_object_set_new(object, "tracks", tracks_object);
   char track_uri[kTrackLinkLength];
 
   for (int i = 0; i < sp_playlist_num_tracks(playlist); i++) {
+    json_t *track_object = json_object();
+    
     sp_track *track = sp_playlist_track(playlist, i);
     sp_link *track_link = sp_link_create_from_track(track, 0);
     sp_link_as_string(track_link, track_uri, kTrackLinkLength);
-    json_array_append(tracks, json_string_nocheck(track_uri));
+    
+    // URI Track
     sp_link_release(track_link);
+    json_object_set_new_nocheck(track_object, "uri", 
+                                json_string_nocheck(track_uri));
+
+    // Title Track 
+    const char *title = sp_track_name(track);
+    if (title != NULL) {
+      json_object_set_new_nocheck(track_object, "title", 
+                                  json_string_nocheck(title));
+    }
+    
+
+    json_t *album_object = json_object();
+    json_object_set_new(track_object, "album", album_object);
+
+    // Album
+    sp_album *album = sp_track_album(track);
+
+    const char *album_title = sp_album_name(album);
+    json_object_set_new_nocheck(album_object, "title", 
+                                json_string_nocheck(album_title));
+
+
+    const byte *album_cover_id = sp_album_cover(album);
+    sp_image *image = sp_image_create(session, album_cover_id);
+
+    if (image != NULL) {
+      sp_link *image_link = sp_link_create_from_image(image); 
+      char image_uri[kTrackLinkLength];
+      sp_link_as_string(image_link, image_uri, kTrackLinkLength);
+
+      sp_link_release(image_link);
+      json_object_set_new_nocheck(album_object, "image", 
+                                  json_string_nocheck(image_uri));
+    }
+
+    // Artists
+    json_t *artists_object = json_array();
+    json_object_set_new(track_object, "artists", artists_object);
+    int num_artists = sp_track_num_artists(track);
+
+    for (int i = 0; i < num_artists; i++) {
+
+      json_t *artist_object = json_object();
+      sp_artist *artist = sp_track_artist(track, i);
+      const char *artist_title = sp_album_name(artist);
+
+      json_object_set_new_nocheck(artist_object, "title", 
+                                  json_string_nocheck(artist_title));
+
+      json_array_append(artists_object, artist_object);
+    }
+
+    json_array_append(tracks_object, track_object);
+
   }
 
   return object;

@@ -190,7 +190,9 @@ static void get_playlist(sp_playlist *playlist,
                          void *userdata) {
   json_t *json = json_object();
 
-  if (playlist_to_json(playlist, json) == NULL) {
+  sp_session *session = userdata;
+
+  if (playlist_to_json(playlist, json, session) == NULL) {
     json_decref(json);
     send_error(request, HTTP_ERROR, "");
     return;
@@ -766,7 +768,6 @@ static void handle_request(struct evhttp_request *request,
   case EVHTTP_REQ_PUT:
   case EVHTTP_REQ_POST:
     {
-      callback_userdata = session;
 
       if (strncmp(action, "add", 3) == 0) {
         request_callback = &put_playlist_add_tracks;
@@ -779,6 +780,8 @@ static void handle_request(struct evhttp_request *request,
     }
     break;
   }
+
+  callback_userdata = session;// TODO: when the session should be used and where?. Session required in sp_image_create ( get_playlist )
 
   if (sp_playlist_is_loaded(playlist)) {
     request_callback(playlist, request, callback_userdata);
