@@ -119,8 +119,8 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object, sp_session *sess
 
     if (image != NULL) {
       sp_link *image_link = sp_link_create_from_image(image); 
-      char image_uri[kTrackLinkLength];
-      sp_link_as_string(image_link, image_uri, kTrackLinkLength);
+      char image_uri[kImageLinkLength];
+      sp_link_as_string(image_link, image_uri, sizeof(image_uri) );
 
       sp_link_release(image_link);
       json_object_set_new_nocheck(album_object, "image", 
