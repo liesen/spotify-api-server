@@ -46,11 +46,14 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
                             strlen("284on3DVWeAxWkgVuzZKGt") + 1;
   char *playlist_uri = malloc(playlist_uri_len);
 
-  if (playlist_uri == NULL) {
+  if (playlist_uri == NULL)
     return NULL;
-  }
 
   sp_link *playlist_link = sp_link_create_from_playlist(playlist);
+
+  if (playlist_link == NULL)  // Shouldn't happen; playlist is loaded (?)
+    return object;
+
   sp_link_as_string(playlist_link, playlist_uri, playlist_uri_len);
   sp_link_release(playlist_link);
   json_object_set_new(object, "uri", 

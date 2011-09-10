@@ -84,6 +84,17 @@ struct playlist_handler {
   void *userdata;
 };
 
+typedef void (*handle_playlistcontainer_fn)(sp_playlistcontainer *,
+                                            struct evhttp_request *,
+                                            void *);
+
+struct playlistcontainer_handler {
+  sp_playlistcontainer_callbacks *playlistcontainer_callbacks;
+  struct evhttp_request *request;
+  handle_playlistcontainer_fn callback;
+  void *userdata;
+};
+
 static void send_reply(struct evhttp_request *request,
                        int code,
                        const char *message,
@@ -153,6 +164,31 @@ void playlist_dispatch(sp_playlist *playlist, void *userdata) {
   free(handler);
 }
 
+static struct playlistcontainer_handler *register_playlistcontainer_callbacks(
+    sp_playlistcontainer *pc,
+    struct evhttp_request *request,
+    handle_playlistcontainer_fn callback,
+    sp_playlistcontainer_callbacks *playlistcontainer_callbacks,
+    void *userdata) {
+  struct playlistcontainer_handler *handler = malloc(sizeof (struct playlistcontainer_handler));
+  handler->request = request;
+  handler->callback = callback;
+  handler->playlistcontainer_callbacks = playlistcontainer_callbacks;
+  handler->userdata = userdata;
+  sp_playlistcontainer_add_callbacks(pc, handler->playlistcontainer_callbacks,
+                                     handler);
+  return handler;
+}
+
+void playlistcontainer_dispatch(sp_playlistcontainer *pc, void *userdata) {
+  struct playlistcontainer_handler *handler = userdata;
+  sp_playlistcontainer_remove_callbacks(pc,
+                                        handler->playlistcontainer_callbacks,
+                                        handler);
+  handler->callback(pc, handler->request, handler->userdata);
+  free(handler);
+}
+
 static void playlist_state_changed(sp_playlist *playlist, void *userdata) {
   if (!sp_playlist_is_loaded(playlist))
     return;
@@ -173,6 +209,10 @@ static void playlist_update_in_progress(sp_playlist *playlist,
 
 static sp_playlist_callbacks playlist_update_in_progress_callbacks = {
   .playlist_update_in_progress = &playlist_update_in_progress
+};
+
+static sp_playlistcontainer_callbacks playlistcontainer_loaded_callbacks = {
+  .container_loaded = &playlistcontainer_dispatch
 };
 
 // HTTP handlers
@@ -269,6 +309,27 @@ static void inbox_post_complete(sp_inbox *inbox, void *userdata) {
       send_error_sp(request, HTTP_ERROR, inbox_error);
       break;
   }
+}
+
+static void get_user_playlists(sp_playlistcontainer *pc,
+                               struct evhttp_request *request,
+                               void *userdata) {
+  json_t *json = json_object();
+  json_t *playlists = json_array();
+  json_object_set_new(json, "playlists", playlists);
+
+  for (int i = 0; i < sp_playlistcontainer_num_playlists(pc); i++) {
+    sp_playlist *playlist = sp_playlistcontainer_playlist(pc, i);
+
+    if (!sp_playlist_is_loaded(playlist)) // TODO(liesen): Wait for it to load?
+      continue;
+
+    json_t *playlist_json = json_object();
+    playlist_to_json(playlist, playlist_json);
+    json_array_append_new(playlists, playlist_json);
+  }
+
+  send_reply_json(request, HTTP_OK, "OK", json);
 }
 
 static void put_user_inbox(const char *user,
@@ -621,6 +682,58 @@ static void put_playlist_patch(sp_playlist *playlist,
                               &playlist_update_in_progress_callbacks, NULL);
 }
 
+static void handle_user_request(struct evhttp_request *request,
+                                char *action,
+                                const char *canonical_username,
+                                sp_session *session) {
+  if (action == NULL) {
+    evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
+    return;
+  }
+
+  int http_method = evhttp_request_get_command(request);
+
+  switch (http_method) {
+    case EVHTTP_REQ_GET:
+      if (strncmp(action, "playlists", 9) == 0) {
+        sp_playlistcontainer *pc = sp_session_publishedcontainer_for_user_create(
+            session, canonical_username);
+
+        if (sp_playlistcontainer_is_loaded(pc)) {
+          get_user_playlists(pc, request, session);
+        } else {
+          register_playlistcontainer_callbacks(pc, request,
+              &get_user_playlists,
+              &playlistcontainer_loaded_callbacks,
+              session);
+        }
+      } else if (strncmp(action, "starred", 7) == 0) {
+        sp_playlist *playlist = sp_session_starred_for_user_create(session,
+            canonical_username);
+
+        if (sp_playlist_is_loaded(playlist)) {
+          get_playlist(playlist, request, session);
+        } else {
+          register_playlist_callbacks(playlist, request, &get_playlist,
+              &playlist_state_changed_callbacks,
+              session);
+        }
+      }
+      break;
+
+    case EVHTTP_REQ_PUT:
+    case EVHTTP_REQ_POST:
+      if (strncmp(action, "inbox", 5) == 0) {
+        put_user_inbox(canonical_username, request, session);
+      }
+      break;
+
+    default:
+      evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
+      break;
+  }
+}
+
 // Request dispatcher
 static void handle_request(struct evhttp_request *request,
                             void *userdata) {
@@ -656,35 +769,16 @@ static void handle_request(struct evhttp_request *request,
 
   // Handle requests to /user/<user_name>/inbox
   if (strncmp(entity, "user", 4) == 0) {
-    char *user = strtok(NULL, "/");
+    char *username = strtok(NULL, "/");
 
-    if (user == NULL) {
+    if (username == NULL) {
       evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
       free(uri);
       return;
     }
 
     char *action = strtok(NULL, "/");
-
-    if (action == NULL) {
-      evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
-      free(uri);
-      return;
-    }
-
-    switch (http_method) {
-      case EVHTTP_REQ_PUT:
-      case EVHTTP_REQ_POST:
-        if (strncmp(action, "inbox", 5) == 0) {
-          put_user_inbox(user, request, session);
-        }
-        break;
-
-      default:
-        evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
-        break;
-    }
-
+    handle_user_request(request, username, action, session);
     free(uri);
     return;
   }
