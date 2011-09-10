@@ -13,6 +13,9 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 
 ### Playlists
 
+    GET /user/{username}/playlists -> {playlists:[<playlist>]}
+    GET /user/{username}/starred -> <playlist>
+
     GET /playlist/{id} -> <playlist>
     GET /playlist/{id}/collaborative -> {collaborative:<boolean>}
     GET /playlist/{id}/subscribers -> [<string>]
