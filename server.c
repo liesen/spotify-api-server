@@ -926,7 +926,7 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
 
   // Log in to Spotify
-  sp_session_login(session, account.username, account.password);
+  sp_session_login(session, account.username, account.password, false);
 
   event_base_dispatch(state->event_base);
 
