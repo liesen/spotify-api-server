@@ -778,7 +778,7 @@ static void handle_request(struct evhttp_request *request,
     }
 
     char *action = strtok(NULL, "/");
-    handle_user_request(request, username, action, session);
+    handle_user_request(request, action, username, session);
     free(uri);
     return;
   }
