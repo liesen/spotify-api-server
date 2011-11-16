@@ -661,10 +661,6 @@ static void put_playlist_patch(sp_playlist *playlist,
                                                         num_valid_tracks,
                                                         state->session);
 
-  svn_stream_t *out;
-  svn_stream_for_stdout(&out, pool);
-  diff_output_stdout(out, diff, playlist, tracks, num_valid_tracks, pool);
-
   if (apply_error != SVN_NO_ERROR) {
     free(tracks);
     svn_handle_error2(apply_error, stderr, false, "Updating playlist");
