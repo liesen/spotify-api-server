@@ -717,11 +717,9 @@ static void handle_user_request(struct evhttp_request *request,
         put_user_inbox(canonical_username, request, session);
       }
       break;
-
-    default:
-      evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
-      break;
   }
+
+  evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
 }
 
 // Request dispatcher
