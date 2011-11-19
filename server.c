@@ -198,15 +198,15 @@ static void playlist_dispatch_if_updated(sp_playlist *playlist,
 }
 
 static sp_playlist_callbacks playlist_state_changed_callbacks = {
-  .playlist_state_changed = playlist_dispatch_if_loaded
+  .playlist_state_changed = &playlist_dispatch_if_loaded
 };
 
 static sp_playlist_callbacks playlist_update_in_progress_callbacks = {
-  .playlist_update_in_progress = (void *) playlist_dispatch_if_updated
+  .playlist_update_in_progress = &playlist_dispatch_if_updated
 };
 
 static sp_playlistcontainer_callbacks playlistcontainer_loaded_callbacks = {
-  .container_loaded = playlistcontainer_dispatch
+  .container_loaded = &playlistcontainer_dispatch
 };
 
 // HTTP handlers
