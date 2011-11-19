@@ -190,30 +190,28 @@ void playlistcontainer_dispatch(sp_playlistcontainer *pc, void *userdata) {
   free(handler);
 }
 
-static void playlist_state_changed(sp_playlist *playlist, void *userdata) {
-  if (!sp_playlist_is_loaded(playlist))
-    return;
-
-  playlist_dispatch(playlist, userdata);
+static void playlist_dispatch_if_loaded(sp_playlist *playlist, void *userdata) {
+  if (sp_playlist_is_loaded(playlist))
+    playlist_dispatch(playlist, userdata);
 }
 
-static sp_playlist_callbacks playlist_state_changed_callbacks = {
-  .playlist_state_changed = &playlist_state_changed
-};
-
-static void playlist_update_in_progress(sp_playlist *playlist,
-                                        bool done,
-                                        void *userdata) {
+static void playlist_dispatch_if_updated(sp_playlist *playlist,
+                                         bool done,
+                                         void *userdata) {
   if (done)
     playlist_dispatch(playlist, userdata);
 }
 
+static sp_playlist_callbacks playlist_state_changed_callbacks = {
+  .playlist_state_changed = playlist_dispatch_if_loaded
+};
+
 static sp_playlist_callbacks playlist_update_in_progress_callbacks = {
-  .playlist_update_in_progress = &playlist_update_in_progress
+  .playlist_update_in_progress = playlist_dispatch_if_updated
 };
 
 static sp_playlistcontainer_callbacks playlistcontainer_loaded_callbacks = {
-  .container_loaded = &playlistcontainer_dispatch
+  .container_loaded = playlistcontainer_dispatch
 };
 
 // HTTP handlers
@@ -487,7 +485,7 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
     return;
   }
 
-  const sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
+  sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
   int num_valid_tracks = json_to_tracks(json, tracks, num_tracks);
   json_decref(json);
   
@@ -602,7 +600,7 @@ static void put_playlist_patch(sp_playlist *playlist,
     return;
   }
 
-  const sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
+  sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
   int num_valid_tracks = 0;
 
   for (int i = 0; i < num_tracks; i++) {

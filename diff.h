@@ -3,7 +3,7 @@
 
 svn_error_t *diff_playlist_tracks(svn_diff_t **,
                                   sp_playlist *,
-                                  const sp_track **tracks,
+                                  sp_track **tracks,
                                   int num_tracks,
                                   apr_pool_t *);
 

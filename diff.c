@@ -179,13 +179,13 @@ svn_error_t *output_diff_modified(void *output_baton,
   }
 
   if (modified_length > 0) {
-    const sp_track *tracks[modified_length];
+    sp_track *tracks[modified_length];
 
     for (int i = 0; i < modified_length; i++)
       tracks[i] = baton->tracks[modified_start + i];
 
     sp_error add_tracks_error = sp_playlist_add_tracks(baton->playlist,
-                                                       tracks,
+                                                       (sp_track *const *) tracks,
                                                        modified_length,
                                                        modified_start,
                                                        baton->session);
