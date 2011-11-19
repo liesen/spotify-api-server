@@ -47,18 +47,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 extern const unsigned char g_appkey[]; 
 extern const size_t g_appkey_size; 
 
-// Account information
+// Spotify account information
 extern const char username[];
 extern const char password[];
 
 static int exit_status = EXIT_FAILURE;
 
-// Spotify account information
-struct account {
-  char *username;
-  char *password;
-};
-
+// Application state
 struct state {
   sp_session *session;
 
@@ -968,11 +963,6 @@ int main(int argc, char **argv) {
   // Open syslog
   openlog("spotify-api-server", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
 
-  struct account account = {
-    .username = username,
-    .password = password
-  };
-
   // Initialize program state
   struct state *state = malloc(sizeof(struct state));
 
@@ -1025,7 +1015,7 @@ int main(int argc, char **argv) {
   }
 
   // Log in to Spotify
-  sp_session_login(session, account.username, account.password, false);
+  sp_session_login(session, username, password, false);
 
   event_base_dispatch(state->event_base);
 
