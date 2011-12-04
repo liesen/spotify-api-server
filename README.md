@@ -39,8 +39,8 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 1. Make sure you have the required libraries
   * [libspotify](http://developer.spotify.com/en/libspotify/) > 9
   * subversion (`libsvn-dev`) and its dependency, `libapr`
-  * [libevent](http://monkey.org/~provos/libevent/)
-  * [jansson](http://www.digip.org/jansson/) > 2.0
+  * [libevent](http://monkey.org/~provos/libevent/) >= 2.0
+  * [jansson](http://www.digip.org/jansson/) >= 2.0
 
 1. Update `account.c` with your credentials. A *Spotify premium account is necessary*.
 
