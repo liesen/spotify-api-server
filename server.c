@@ -13,7 +13,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */ 
+ */
 
 #include <apr.h>
 #include <assert.h>
@@ -197,14 +197,22 @@ static void playlist_dispatch_if_updated(sp_playlist *playlist,
     playlist_dispatch(playlist, userdata);
 }
 
+// Callbacks for when a playlist is loaded
 static sp_playlist_callbacks playlist_state_changed_callbacks = {
   .playlist_state_changed = &playlist_dispatch_if_loaded
 };
 
+// Callbacks for when a playlist is updated
 static sp_playlist_callbacks playlist_update_in_progress_callbacks = {
   .playlist_update_in_progress = &playlist_dispatch_if_updated
 };
 
+// Callbacks for when subscribers to a playlist is changed
+static sp_playlist_callbacks playlist_subscribers_changed_callbacks = {
+  .subscribers_changed = &playlist_dispatch
+};
+
+// Callbacks for when a playlist container is loaded
 static sp_playlistcontainer_callbacks playlistcontainer_loaded_callbacks = {
   .container_loaded = &playlistcontainer_dispatch
 };
@@ -242,9 +250,9 @@ static void get_playlist_collaborative(sp_playlist *playlist,
   send_reply_json(request, HTTP_OK, "OK", json);
 }
 
-static void get_playlist_subscribers(sp_playlist *playlist,
-                                     struct evhttp_request *request,
-                                     void *userdata) {
+static void get_playlist_subscribers_callback(sp_playlist *playlist,
+                                              struct evhttp_request *request,
+                                              void *userdata) {
   assert(sp_playlist_is_loaded(playlist));
   sp_subscribers *subscribers = sp_playlist_subscribers(playlist);
   json_t *array = json_array();
@@ -254,7 +262,20 @@ static void get_playlist_subscribers(sp_playlist *playlist,
     json_array_append_new(array, json_string(subscriber));
   }
 
+  sp_playlist_subscribers_free(subscribers);
   send_reply_json(request, HTTP_OK, "OK", array);
+}
+
+static void get_playlist_subscribers(sp_playlist *playlist,
+                                     struct evhttp_request *request,
+                                     void *userdata) {
+  assert(sp_playlist_is_loaded(playlist));
+  sp_session *session = userdata;
+  register_playlist_callbacks(playlist, request,
+                              &get_playlist_subscribers_callback,
+                              &playlist_subscribers_changed_callbacks,
+                              userdata);
+  sp_playlist_update_subscribers(session, playlist);
 }
 
 // Reads JSON from the requests body. Returns NULL on any error.
@@ -483,7 +504,7 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
   sp_track **tracks = calloc(num_tracks, sizeof (sp_track *));
   int num_valid_tracks = json_to_tracks(json, tracks, num_tracks);
   json_decref(json);
-  
+
   // Bail if no tracks could be read from input
   if (num_valid_tracks == 0) {
     send_error(request, HTTP_BADREQUEST, "No valid tracks");
@@ -541,8 +562,8 @@ static void put_playlist_remove_tracks(sp_playlist *playlist,
 
   int *tracks = calloc(count, sizeof(int));
 
-  for (int i = 0; i < count; i++) 
-    tracks[i] = index + i; 
+  for (int i = 0; i < count; i++)
+    tracks[i] = index + i;
 
   struct playlist_handler *handler = register_playlist_callbacks(
       playlist, request, &get_playlist,
@@ -619,7 +640,7 @@ static void put_playlist_patch(sp_playlist *playlist,
     }
 
     sp_track *track = sp_link_as_track(track_link);
-    
+
     if (track == NULL)
       continue;
 
@@ -627,7 +648,7 @@ static void put_playlist_patch(sp_playlist *playlist,
   }
 
   json_decref(json);
-  
+
   // Bail if no tracks could be read from input
   if (num_valid_tracks == 0) {
     send_error(request, HTTP_BADREQUEST, "No valid tracks");
@@ -829,7 +850,7 @@ static void handle_request(struct evhttp_request *request,
 
   // Default request handler
   handle_playlist_fn request_callback = &not_implemented;
-  void *callback_userdata = NULL;
+  void *callback_userdata = session;
 
   switch (http_method) {
   case EVHTTP_REQ_GET:
@@ -848,8 +869,6 @@ static void handle_request(struct evhttp_request *request,
   case EVHTTP_REQ_PUT:
   case EVHTTP_REQ_POST:
     {
-      callback_userdata = session;
-
       if (strncmp(action, "add", 3) == 0) {
         request_callback = &put_playlist_add_tracks;
       } else if (strncmp(action, "remove", 6) == 0) {
@@ -869,7 +888,7 @@ static void handle_request(struct evhttp_request *request,
     register_playlist_callbacks(playlist, request, request_callback,
                                 &playlist_state_changed_callbacks,
                                 callback_userdata);
-  } 
+  }
 }
 
 static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata);
