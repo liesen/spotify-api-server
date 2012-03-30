@@ -1032,7 +1032,7 @@ int main(int argc, char **argv) {
   }
 
   // Log in to Spotify
-  sp_session_login(session, username, password, false);
+  sp_session_login(session, username, password, false, NULL);
 
   event_base_dispatch(state->event_base);
 
