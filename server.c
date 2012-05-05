@@ -41,6 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "json.h"
 
 #define HTTP_PARTIAL 210
+#define HTTP_TIMEOUT 408
 #define HTTP_ERROR 500
 #define HTTP_NOTIMPL 501
 
@@ -53,6 +54,12 @@ extern const char username[];
 extern const char password[];
 
 static int exit_status = EXIT_FAILURE;
+
+// Timeout for all GET requests
+static struct timeval request_timeout = {
+  .tv_usec = 0,
+  .tv_sec = 30
+};
 
 // Application state
 struct state {
@@ -78,6 +85,7 @@ struct playlist_handler {
   sp_playlist_callbacks *playlist_callbacks;
   struct evhttp_request *request;
   handle_playlist_fn callback;
+  struct event *timeout;
   void *userdata;
 };
 
@@ -138,17 +146,30 @@ static void send_error_sp(struct evhttp_request *request,
   send_error(request, code, message);
 }
 
+static void handle_request_timeout(int fd, short ev, void *userdata) {
+  struct playlist_handler *handler = userdata;
+  struct evhttp_request *request = handler->request;
+  syslog(LOG_DEBUG, "%s [timeout]\n", evhttp_request_get_uri(request));
+  evhttp_send_reply(request, HTTP_TIMEOUT, "Request Timeout", NULL);
+  evtimer_del(handler->timeout);
+}
+
 static struct playlist_handler *register_playlist_callbacks(
     sp_playlist *playlist,
     struct evhttp_request *request,
     handle_playlist_fn callback,
     sp_playlist_callbacks *playlist_callbacks,
+    struct state *state,
     void *userdata) {
   struct playlist_handler *handler = malloc(sizeof (struct playlist_handler));
   handler->request = request;
   handler->callback = callback;
   handler->playlist_callbacks = playlist_callbacks;
   handler->userdata = userdata;
+
+  // Set request timeout
+  handler->timeout = evtimer_new(state->event_base, &handle_request_timeout, handler);
+  evtimer_add(handler->timeout, &request_timeout);
   sp_playlist_add_callbacks(playlist, handler->playlist_callbacks, handler);
   return handler;
 }
@@ -157,7 +178,13 @@ void playlist_dispatch(sp_playlist *playlist, void *userdata) {
   struct playlist_handler *handler = userdata;
   sp_playlist_remove_callbacks(playlist, handler->playlist_callbacks, handler);
   handler->playlist_callbacks = NULL;
-  handler->callback(playlist, handler->request, handler->userdata);
+  int pending = evtimer_pending(handler->timeout, NULL);
+  evtimer_del(handler->timeout);
+
+  if (pending) {
+    handler->callback(playlist, handler->request, handler->userdata);
+  }
+
   free(handler);
 }
 
@@ -166,6 +193,7 @@ static struct playlistcontainer_handler *register_playlistcontainer_callbacks(
     struct evhttp_request *request,
     handle_playlistcontainer_fn callback,
     sp_playlistcontainer_callbacks *playlistcontainer_callbacks,
+    struct state *state,
     void *userdata) {
   struct playlistcontainer_handler *handler = malloc(sizeof (struct playlistcontainer_handler));
   handler->request = request;
@@ -271,11 +299,13 @@ static void get_playlist_subscribers(sp_playlist *playlist,
                                      struct evhttp_request *request,
                                      void *userdata) {
   assert(sp_playlist_is_loaded(playlist));
-  sp_session *session = userdata;
+  struct state *state = userdata;
+  sp_session *session = state->session;
   register_playlist_callbacks(playlist, request,
                               &get_playlist_subscribers_callback,
                               &playlist_subscribers_changed_callbacks,
-                              userdata);
+                              state,
+                              state);
   sp_playlist_update_subscribers(session, playlist);
 }
 
@@ -415,7 +445,8 @@ static void put_playlist(sp_playlist *playlist,
   // the same, but do they have to be?
   assert(playlist == NULL);
 
-  sp_session *session = userdata;
+  struct state *state = userdata;
+  sp_session *session = state->session;
   json_error_t loads_error;
   json_t *playlist_json = read_request_body_json(request, &loads_error);
 
@@ -460,14 +491,15 @@ static void put_playlist(sp_playlist *playlist,
     send_error(request, HTTP_ERROR, "Unable to create playlist");
   } else {
     register_playlist_callbacks(playlist, request, &get_playlist,
-                                &playlist_state_changed_callbacks, NULL);
+                                &playlist_state_changed_callbacks, state, NULL);
   }
 }
 
 static void put_playlist_add_tracks(sp_playlist *playlist,
                                     struct evhttp_request *request,
                                     void *userdata) {
-  sp_session *session = userdata;
+  struct state *state = userdata;
+  sp_session *session = state->session;
   const char *uri = evhttp_request_get_uri(request);
   struct evkeyvalq query_fields;
   evhttp_parse_query(uri, &query_fields);
@@ -519,7 +551,7 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
 
   struct playlist_handler *handler = register_playlist_callbacks(
       playlist, request, &get_playlist,
-      &playlist_update_in_progress_callbacks, NULL);
+      &playlist_update_in_progress_callbacks, state, NULL);
   sp_error add_tracks_error = sp_playlist_add_tracks(playlist, tracks,
                                                      num_valid_tracks,
                                                      index, session);
@@ -537,7 +569,7 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
 static void put_playlist_remove_tracks(sp_playlist *playlist,
                                        struct evhttp_request *request,
                                        void *userdata) {
-  // sp_session *session = userdata;
+  struct state *state = userdata;
   const char *uri = evhttp_request_get_uri(request);
   struct evkeyvalq query_fields;
   evhttp_parse_query(uri, &query_fields);
@@ -572,7 +604,7 @@ static void put_playlist_remove_tracks(sp_playlist *playlist,
 
   struct playlist_handler *handler = register_playlist_callbacks(
       playlist, request, &get_playlist,
-      &playlist_update_in_progress_callbacks, NULL);
+      &playlist_update_in_progress_callbacks, state, NULL);
   sp_error remove_tracks_error = sp_playlist_remove_tracks(playlist, tracks, 
                                                            count);
 
@@ -695,18 +727,19 @@ static void put_playlist_patch(sp_playlist *playlist,
 
   free(tracks);
   register_playlist_callbacks(playlist, request, &get_playlist,
-                              &playlist_update_in_progress_callbacks, NULL);
+                              &playlist_update_in_progress_callbacks, state, NULL);
 }
 
 static void handle_user_request(struct evhttp_request *request,
                                 char *action,
                                 const char *canonical_username,
-                                sp_session *session) {
+                                struct state *state) {
   if (action == NULL) {
     evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
     return;
   }
 
+  sp_session *session = state->session;
   int http_method = evhttp_request_get_command(request);
 
   switch (http_method) {
@@ -716,23 +749,23 @@ static void handle_user_request(struct evhttp_request *request,
             session, canonical_username);
 
         if (sp_playlistcontainer_is_loaded(pc)) {
-          get_user_playlists(pc, request, session);
+          get_user_playlists(pc, request, NULL);
         } else {
           register_playlistcontainer_callbacks(pc, request,
-              &get_user_playlists,
-              &playlistcontainer_loaded_callbacks,
-              session);
+                                               &get_user_playlists,
+                                               &playlistcontainer_loaded_callbacks,
+                                               state, NULL);
         }
       } else if (strncmp(action, "starred", 7) == 0) {
         sp_playlist *playlist = sp_session_starred_for_user_create(session,
-            canonical_username);
+                                                                   canonical_username);
 
         if (sp_playlist_is_loaded(playlist)) {
-          get_playlist(playlist, request, session);
+          get_playlist(playlist, request, NULL);
         } else {
           register_playlist_callbacks(playlist, request, &get_playlist,
-              &playlist_state_changed_callbacks,
-              session);
+                                      &playlist_state_changed_callbacks,
+                                      state, NULL);
         }
       }
       break;
@@ -750,7 +783,7 @@ static void handle_user_request(struct evhttp_request *request,
 
 // Request dispatcher
 static void handle_request(struct evhttp_request *request,
-                            void *userdata) {
+                           void *userdata) {
   evhttp_connection_set_timeout(request->evcon, 1);
   evhttp_add_header(evhttp_request_get_output_headers(request),
                     "Server", "johan@liesen.se/spotify-api-server");
@@ -792,7 +825,7 @@ static void handle_request(struct evhttp_request *request,
     }
 
     char *action = strtok(NULL, "/");
-    handle_user_request(request, action, username, session);
+    handle_user_request(request, action, username, state);
     free(uri);
     return;
   }
@@ -855,7 +888,7 @@ static void handle_request(struct evhttp_request *request,
 
   // Default request handler
   handle_playlist_fn request_callback = &not_implemented;
-  void *callback_userdata = session;
+  void *callback_userdata = NULL;
 
   switch (http_method) {
   case EVHTTP_REQ_GET:
@@ -866,6 +899,7 @@ static void handle_request(struct evhttp_request *request,
       } else if (strncmp(action, "collaborative", 13) == 0) {
         request_callback = &get_playlist_collaborative;
       } else if (strncmp(action, "subscribers", 11) == 0) {
+        callback_userdata = state;
         request_callback = &get_playlist_subscribers;
       }
     }
@@ -879,7 +913,6 @@ static void handle_request(struct evhttp_request *request,
       } else if (strncmp(action, "remove", 6) == 0) {
         request_callback = &put_playlist_remove_tracks;
       } else if (strncmp(action, "patch", 5) == 0) {
-        callback_userdata = state;
         request_callback = &put_playlist_patch;
       }
     }
@@ -892,6 +925,7 @@ static void handle_request(struct evhttp_request *request,
     // Wait for playlist to load
     register_playlist_callbacks(playlist, request, request_callback,
                                 &playlist_state_changed_callbacks,
+                                state,
                                 callback_userdata);
   }
 }
@@ -910,7 +944,6 @@ static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
   sp_playlistcontainer_remove_callbacks(pc, &playlistcontainer_callbacks, session);
 
   state->http = evhttp_new(state->event_base);
-  evhttp_set_timeout(state->http, 60);
   evhttp_set_gencb(state->http, &handle_request, state);
 
   // TODO(liesen): Make address and port configurable
