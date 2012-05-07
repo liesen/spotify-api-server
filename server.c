@@ -40,6 +40,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "diff.h"
 #include "json.h"
 
+#define HTTP_PARTIAL 210
 #define HTTP_ERROR 500
 #define HTTP_NOTIMPL 501
 
@@ -332,19 +333,23 @@ static void get_user_playlists(sp_playlistcontainer *pc,
   json_t *json = json_object();
   json_t *playlists = json_array();
   json_object_set_new(json, "playlists", playlists);
+  int status = HTTP_OK;
 
   for (int i = 0; i < sp_playlistcontainer_num_playlists(pc); i++) {
     sp_playlist *playlist = sp_playlistcontainer_playlist(pc, i);
 
-    if (!sp_playlist_is_loaded(playlist)) // TODO(liesen): Wait for it to load?
+    if (!sp_playlist_is_loaded(playlist)) {
+      status = HTTP_PARTIAL;
       continue;
+    }
 
     json_t *playlist_json = json_object();
     playlist_to_json(playlist, playlist_json);
     json_array_append_new(playlists, playlist_json);
   }
 
-  send_reply_json(request, HTTP_OK, "OK", json);
+  send_reply_json(request, status, status == HTTP_OK ? "OK" : "Partial Content",
+                  json);
 }
 
 static void put_user_inbox(const char *user,
