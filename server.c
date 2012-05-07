@@ -147,6 +147,9 @@ static void send_error_sp(struct evhttp_request *request,
 }
 
 static void handle_request_timeout(int fd, short ev, void *userdata) {
+  // TODO(liesen): unregister playlist callbacks to make sure the request
+  // isn't dispatched after having timed out (pass sp_playlist in
+  // playlist_handler struct)
   struct playlist_handler *handler = userdata;
   struct evhttp_request *request = handler->request;
   syslog(LOG_DEBUG, "%s [timeout]\n", evhttp_request_get_uri(request));
