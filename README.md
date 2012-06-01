@@ -37,7 +37,7 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 ## How to build
 
 1. Make sure you have the required libraries
-  * [libspotify](http://developer.spotify.com/en/libspotify/) == 11.1.60
+  * [libspotify](http://developer.spotify.com/en/libspotify/) >= 11.1.60
   * subversion (`libsvn-dev`) and its dependency, `libapr`
   * [libevent](http://monkey.org/~provos/libevent/) >= 2.0
   * [jansson](http://www.digip.org/jansson/) >= 2.0
