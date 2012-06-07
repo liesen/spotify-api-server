@@ -3,3 +3,5 @@
 appkey.c
 account.c
 server
+config.json
+app.key
