@@ -39,6 +39,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "diff.h"
 #include "json.h"
+#include "config.h"
 
 #define HTTP_PARTIAL 210
 #define HTTP_ERROR 500
@@ -47,6 +48,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Application key
 extern const unsigned char g_appkey[]; 
 extern const size_t g_appkey_size; 
+
+Config g_config;
 
 // Spotify account information
 extern const char username[];
@@ -914,7 +917,7 @@ static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
   evhttp_set_gencb(state->http, &handle_request, state);
 
   // TODO(liesen): Make address and port configurable
-  if (evhttp_bind_socket(state->http, "0.0.0.0", 1337) == -1) {
+  if (evhttp_bind_socket(state->http, "0.0.0.0", g_config.port) == -1) {
     syslog(LOG_WARNING, "Could not bind HTTP server socket");
     sp_session_logout(session);
   }
@@ -942,6 +945,7 @@ static void logged_out(sp_session *session) {
 
 
 static void logged_in(sp_session *session, sp_error error) {
+  printf("Server started at port %d for user %s\n", g_config.port, g_config.username);
   if (error != SP_ERROR_OK) {
     syslog(LOG_CRIT, "Error logging in to Spotify: %s",
            sp_error_message(error));
@@ -984,6 +988,25 @@ static void notify_main_thread(sp_session *session) {
 int main(int argc, char **argv) {
   // Open syslog
   openlog("spotify-api-server", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
+  
+  if(argc == 1){
+    fprintf(stderr, "At least one argument needed\n");
+    return 0;
+  }
+  
+  /*
+    g_config.username
+    g_config.password
+    g_config.port
+    g_config.api_key
+    g_config.api_key_size
+  */
+  g_config = get_config(argv[1]);
+  
+  /* An error message should have been printed from inside get_config */
+  if(g_config.valid == -1){
+    return 0;
+  }
 
   // Initialize program state
   struct state *state = malloc(sizeof(struct state));
@@ -1012,11 +1035,11 @@ int main(int argc, char **argv) {
     .logged_out = &logged_out,
     .notify_main_thread = &notify_main_thread
   };
-
+  
   sp_session_config session_config = {
     .api_version = SPOTIFY_API_VERSION,
-    .application_key = g_appkey,
-    .application_key_size = g_appkey_size,
+    .application_key = g_config.api_key,
+    .application_key_size = g_config.api_key_size,
     .cache_location = ".cache",
     .callbacks = &session_callbacks,
     .compress_playlists = false,
@@ -1025,22 +1048,21 @@ int main(int argc, char **argv) {
     .user_agent = "sphttpd",
     .userdata = state,
   };
-
+  
   sp_session *session;
   sp_error session_create_error = sp_session_create(&session_config,
                                                     &session);
-
   if (session_create_error != SP_ERROR_OK) {
     syslog(LOG_CRIT, "Error creating Spotify session: %s",
            sp_error_message(session_create_error));
     return EXIT_FAILURE;
   }
-
+  
   // Log in to Spotify
-  sp_session_login(session, username, password, false, NULL);
-
+  sp_session_login(session, g_config.username, g_config.password, false, NULL);
+  
   event_base_dispatch(state->event_base);
-
+  
   event_free(state->async);
   event_free(state->timer);
   if (state->http != NULL) evhttp_free(state->http);
