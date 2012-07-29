@@ -39,35 +39,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "constants.h"
 #include "diff.h"
 #include "json.h"
+#include "server.h"
 
 #define HTTP_PARTIAL 210
 #define HTTP_ERROR 500
 #define HTTP_NOTIMPL 501
-
-// Application key
-extern const unsigned char g_appkey[]; 
-extern const size_t g_appkey_size; 
-
-// Spotify account information
-extern const char username[];
-extern const char password[];
-
-static int exit_status = EXIT_FAILURE;
-
-// Application state
-struct state {
-  sp_session *session;
-
-  struct event_base *event_base;
-  struct event *async;
-  struct event *timer;
-  struct event *sigint;
-  struct timeval next_timeout;
-
-  struct evhttp *http;
-
-  apr_pool_t *pool;
-};
 
 typedef void (*handle_playlist_fn)(sp_playlist *playlist,
                                    struct evhttp_request *request,
@@ -153,7 +129,7 @@ static struct playlist_handler *register_playlist_callbacks(
   return handler;
 }
 
-void playlist_dispatch(sp_playlist *playlist, void *userdata) {
+static void playlist_dispatch(sp_playlist *playlist, void *userdata) {
   struct playlist_handler *handler = userdata;
   sp_playlist_remove_callbacks(playlist, handler->playlist_callbacks, handler);
   handler->playlist_callbacks = NULL;
@@ -177,7 +153,7 @@ static struct playlistcontainer_handler *register_playlistcontainer_callbacks(
   return handler;
 }
 
-void playlistcontainer_dispatch(sp_playlistcontainer *pc, void *userdata) {
+static void playlistcontainer_dispatch(sp_playlistcontainer *pc, void *userdata) {
   struct playlistcontainer_handler *handler = userdata;
   sp_playlistcontainer_remove_callbacks(pc,
                                         handler->playlistcontainer_callbacks,
@@ -921,15 +897,13 @@ static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
 }
 
 // Catches SIGINT and exits gracefully
-static void sigint_handler(evutil_socket_t socket,
-                           short what,
-                           void *userdata) {
+void sigint_handler(evutil_socket_t socket, short what, void *userdata) {
   syslog(LOG_DEBUG, "signal_handler\n");
   struct state *state = userdata;
   sp_session_logout(state->session);
 }
 
-static void logged_out(sp_session *session) {
+void logged_out(sp_session *session) {
   syslog(LOG_DEBUG, "logged_out\n");
   struct state *state = sp_session_userdata(session);
   event_del(state->async);
@@ -940,17 +914,17 @@ static void logged_out(sp_session *session) {
   closelog();
 }
 
+void logged_in(sp_session *session, sp_error error) {
+  struct state *state = sp_session_userdata(session);
 
-static void logged_in(sp_session *session, sp_error error) {
   if (error != SP_ERROR_OK) {
     syslog(LOG_CRIT, "Error logging in to Spotify: %s",
            sp_error_message(error));
-    exit_status = EXIT_FAILURE;
+    state->exit_status = EXIT_FAILURE;
     logged_out(session);
     return;
   }
 
-  struct state *state = sp_session_userdata(session);
   state->session = session;
   evsignal_add(state->sigint, NULL);
 
@@ -959,9 +933,7 @@ static void logged_in(sp_session *session, sp_error error) {
                                      session);
 }
 
-static void process_events(evutil_socket_t socket,
-                           short what,
-                           void *userdata) {
+void process_events(evutil_socket_t socket, short what, void *userdata) {
   struct state *state = userdata;
   event_del(state->timer);
   int timeout = 0;
@@ -975,77 +947,8 @@ static void process_events(evutil_socket_t socket,
   evtimer_add(state->timer, &state->next_timeout);
 }
 
-static void notify_main_thread(sp_session *session) {
+void notify_main_thread(sp_session *session) {
   syslog(LOG_DEBUG, "notify_main_thread\n");
   struct state *state = sp_session_userdata(session);
   event_active(state->async, 0, 1);
 }
-
-int main(int argc, char **argv) {
-  // Open syslog
-  openlog("spotify-api-server", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL1);
-
-  // Initialize program state
-  struct state *state = malloc(sizeof(struct state));
-
-  // Initialize libev w/ pthreads
-  evthread_use_pthreads();
-
-  state->event_base = event_base_new();
-  state->async = event_new(state->event_base, -1, 0, &process_events, state);
-  state->timer = evtimer_new(state->event_base, &process_events, state);
-  state->sigint = evsignal_new(state->event_base, SIGINT, &sigint_handler, state);
-
-  // Initialize APR
-  apr_status_t rv = apr_initialize();
-
-  if (rv != APR_SUCCESS) {
-    syslog(LOG_CRIT, "Unable to initialize APR");
-    return EXIT_FAILURE;
-  }
-
-  apr_pool_create(&state->pool, NULL);
-
-  // Initialize libspotify
-  sp_session_callbacks session_callbacks = {
-    .logged_in = &logged_in,
-    .logged_out = &logged_out,
-    .notify_main_thread = &notify_main_thread
-  };
-
-  sp_session_config session_config = {
-    .api_version = SPOTIFY_API_VERSION,
-    .application_key = g_appkey,
-    .application_key_size = g_appkey_size,
-    .cache_location = ".cache",
-    .callbacks = &session_callbacks,
-    .compress_playlists = false,
-    .dont_save_metadata_for_playlists = false,
-    .settings_location = ".settings",
-    .user_agent = "sphttpd",
-    .userdata = state,
-  };
-
-  sp_session *session;
-  sp_error session_create_error = sp_session_create(&session_config,
-                                                    &session);
-
-  if (session_create_error != SP_ERROR_OK) {
-    syslog(LOG_CRIT, "Error creating Spotify session: %s",
-           sp_error_message(session_create_error));
-    return EXIT_FAILURE;
-  }
-
-  // Log in to Spotify
-  sp_session_login(session, username, password, false, NULL);
-
-  event_base_dispatch(state->event_base);
-
-  event_free(state->async);
-  event_free(state->timer);
-  if (state->http != NULL) evhttp_free(state->http);
-  event_base_free(state->event_base);
-  free(state);
-  return exit_status;
-}
-
