@@ -110,26 +110,26 @@ int main(int argc, char **argv) {
       // Login configuration
       {"username", required_argument, NULL, 'u'},
       {"password", required_argument, NULL, 'p'},
-      {"remember_me", no_argument, &remember_me, 1},
+      {"remember-me", no_argument, &remember_me, 1},
       {"credentials", required_argument, NULL, 'c'},
       {"relogin", no_argument, &relogin, 1},
 
-      {"credentials_path", required_argument, NULL, 'k'},
+      {"credentials-path", required_argument, NULL, 'k'},
 
       // Application key file (binary) path
-      {"application_key", required_argument, NULL, 'A'},
+      {"application-key", required_argument, NULL, 'A'},
 
       // Session configuration
-      {"cache_location", required_argument, NULL, 'C'},
-      {"compress_playlists", no_argument,
+      {"cache-location", required_argument, NULL, 'C'},
+      {"compress-playlists", no_argument,
        &session_config.compress_playlists, 1},
-      {"dont_save_metadata_for_playlists", no_argument,
+      {"dont-save_metadata_for_playlists", no_argument,
        &session_config.dont_save_metadata_for_playlists, 1},
-      {"initially_unload_playlists", no_argument,
+      {"initially-unload_playlists", no_argument,
         &session_config.initially_unload_playlists, 1},
-      {"settings_location", required_argument, NULL, 'S'},
+      {"settings-location", required_argument, NULL, 'S'},
       {"tracefile", required_argument, NULL, 'T'},
-      {"user_agent", required_argument, NULL, 'U'},
+      {"user-agent", required_argument, NULL, 'U'},
 
       // HTTP options
       {"host", required_argument, NULL, 'H'},
