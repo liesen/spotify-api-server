@@ -889,11 +889,19 @@ static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
   evhttp_set_timeout(state->http, 60);
   evhttp_set_gencb(state->http, &handle_request, state);
 
-  // TODO(liesen): Make address and port configurable
-  if (evhttp_bind_socket(state->http, "0.0.0.0", 1337) == -1) {
-    syslog(LOG_WARNING, "Could not bind HTTP server socket");
+  // Bind HTTP server
+  int bind = evhttp_bind_socket(state->http, state->http_host,
+                                state->http_port);
+
+  if (bind == -1) {
+    syslog(LOG_WARNING, "Could not bind HTTP server socket to %s:%d",
+           state->http_host, state->http_port);
     sp_session_logout(session);
+    return;
   }
+
+  syslog(LOG_DEBUG, "HTTP server listening on %s:%d", state->http_host,
+         state->http_port);
 }
 
 void credentials_blob_updated(sp_session *session, const char *blob) {

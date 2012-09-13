@@ -63,6 +63,10 @@ int main(int argc, char **argv) {
   // Initialize program state
   struct state *state = malloc(sizeof(struct state));
 
+  // Web server defaults
+  state->http_host = strdup("127.0.0.1");
+  state->http_port = 1337;
+
   // Initialize libev w/ pthreads
   evthread_use_pthreads();
 
@@ -126,10 +130,15 @@ int main(int argc, char **argv) {
       {"tracefile", required_argument, NULL, 'T'},
       {"user_agent", required_argument, NULL, 'U'},
 
+      // HTTP options
+      {"host", required_argument, NULL, 'H'},
+      {"port", required_argument, NULL, 'P'},
+
       {NULL, 0, NULL, 0}
     };
+    const char optstring[] = "u:p:k:A:C:S:T:U:H:P:";
 
-    for (int c; (c = getopt_long_only(argc, argv, "u:p:k:A:C:S:T:U:h:p:", opts, NULL)) != -1; ) {
+    for (int c; (c = getopt_long(argc, argv, optstring, opts, NULL)) != -1; ) {
       switch (c) {
         case 'u':
           username = strdup(optarg);
@@ -167,6 +176,14 @@ int main(int argc, char **argv) {
         case 'U':
           session_config.user_agent = strdup(optarg);
           break;
+
+        case 'H':
+          state->http_host = strdup(optarg);
+          break;
+
+        case 'P':
+          state->http_port = atoi(optarg);
+          break;
       }
     }
 
@@ -194,6 +211,7 @@ int main(int argc, char **argv) {
   event_free(state->timer);
   event_free(state->sigint);
   if (state->http != NULL) evhttp_free(state->http);
+  free(state->http_host);
   event_base_free(state->event_base);
   int exit_status = state->exit_status;
   free(state);

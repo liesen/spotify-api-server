@@ -15,6 +15,8 @@ struct state {
   struct timeval next_timeout;
 
   struct evhttp *http;
+  char *http_host;
+  int http_port;
 
   apr_pool_t *pool;
 
