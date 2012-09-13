@@ -187,24 +187,35 @@ int main(int argc, char **argv) {
       }
     }
 
-    sp_session *session;
-    sp_error session_create_error = sp_session_create(&session_config,
-                                                      &session);
-
-    if (session_create_error != SP_ERROR_OK) {
-      syslog(LOG_CRIT, "Error creating Spotify session: %s",
-             sp_error_message(session_create_error));
+    if (session_config.application_key_size == 0) {
+      fprintf(stderr, "You didn't specify a path to your application key (use"
+                      " -A/--application_key).\n");
     } else {
-      // Log in to Spotify
-      if (relogin) {
-        sp_session_relogin(session);
-      } else {
-        sp_session_login(session, username, password, remember_me,
-                         credentials_blob);
-      }
+      sp_session *session;
+      sp_error session_create_error = sp_session_create(&session_config,
+                                                        &session);
 
-      event_base_dispatch(state->event_base);
+      if (session_create_error != SP_ERROR_OK) {
+        syslog(LOG_CRIT, "Error creating Spotify session: %s",
+               sp_error_message(session_create_error));
+      } else {
+        // Log in to Spotify
+        if (relogin) {
+          sp_session_relogin(session);
+        } else {
+          sp_session_login(session, username, password, remember_me,
+                           credentials_blob);
+        }
+
+        event_base_dispatch(state->event_base);
+      }
     }
+
+    // Free whatever was set by command line args
+    // TODO(liesen): free session_config settings too?
+    if (username != NULL) free(username);
+    if (password != NULL) free(password);
+    if (credentials_blob != NULL) free(credentials_blob);
   }
 
   event_free(state->async);
