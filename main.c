@@ -94,6 +94,7 @@ int main(int argc, char **argv) {
     sp_session_config session_config = {
       .api_version = SPOTIFY_API_VERSION,
       .application_key_size = 0,
+      .cache_location = ".cache",  // Cache location is required
       .callbacks = &session_callbacks,
       .user_agent = "spotify-api-server",
       .userdata = state,
