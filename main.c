@@ -2,21 +2,59 @@
 #include <event2/event.h>
 #include <event2/http.h>
 #include <event2/thread.h>
+#include <getopt.h>
 #include <libspotify/api.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <svn_diff.h>
+#include <sys/stat.h>
 #include <syslog.h>
 
 #include "server.h"
 
-// Application key
+// Application keys are 321 bytes, from what I've seen... but ramp it up
+// to be on the safe side
+#define MAX_APPLICATION_KEY_SIZE 1024
+
 extern const unsigned char g_appkey[];
 extern const size_t g_appkey_size;
 
-// Spotify account information
-extern const char username[];
-extern const char password[];
+// Read application key from file (binary), placing the results into the
+// session configuration. Fails silently, without warning, if something
+// goes wrong: libspotify will fail later, too.
+void read_application_key(char *path, sp_session_config *session_config) {
+  struct stat st;
+
+  if (stat(path, &st) != 0) {
+    return;
+  }
+
+  int appkey_size = st.st_size;
+
+  if (appkey_size > MAX_APPLICATION_KEY_SIZE) {
+    // Application key file looks awfully large
+    appkey_size = MAX_APPLICATION_KEY_SIZE;
+  }
+
+  size_t size = sizeof(unsigned char);
+  unsigned char *appkey = malloc(appkey_size * size);
+
+  if (appkey == NULL) {
+    return;
+  }
+
+  FILE *file = fopen(path, "rb");
+
+  if (!file) {
+    free(appkey);
+    return;
+  }
+
+  session_config->application_key_size = fread(appkey, size, appkey_size, file);
+  session_config->application_key = appkey;
+  fclose(file);
+}
 
 int main(int argc, char **argv) {
   // Open syslog
@@ -51,16 +89,86 @@ int main(int argc, char **argv) {
 
     sp_session_config session_config = {
       .api_version = SPOTIFY_API_VERSION,
-      .application_key = g_appkey,
-      .application_key_size = g_appkey_size,
-      .cache_location = ".cache",
+      .application_key_size = 0,
       .callbacks = &session_callbacks,
-      .compress_playlists = false,
-      .dont_save_metadata_for_playlists = false,
-      .settings_location = ".settings",
-      .user_agent = "sphttpd",
+      .user_agent = "spotify-api-server",
       .userdata = state,
     };
+
+    // Parse command line arguments
+    char *username = NULL;
+    char *password = NULL;
+    char *credentials_blob = NULL;
+    bool remember_me = false;
+    bool relogin = false;
+    struct option opts[] = {
+      // Login configuration
+      {"username", required_argument, NULL, 'u'},
+      {"password", required_argument, NULL, 'p'},
+      {"remember_me", no_argument, &remember_me, 1},
+      {"credentials", required_argument, NULL, 'c'},
+      {"relogin", no_argument, &relogin, 1},
+
+      {"credentials_path", required_argument, NULL, 'k'},
+
+      // Application key file (binary) path
+      {"application_key", required_argument, NULL, 'A'},
+
+      // Session configuration
+      {"cache_location", required_argument, NULL, 'C'},
+      {"compress_playlists", no_argument,
+       &session_config.compress_playlists, 1},
+      {"dont_save_metadata_for_playlists", no_argument,
+       &session_config.dont_save_metadata_for_playlists, 1},
+      {"initially_unload_playlists", no_argument,
+        &session_config.initially_unload_playlists, 1},
+      {"settings_location", required_argument, NULL, 'S'},
+      {"tracefile", required_argument, NULL, 'T'},
+      {"user_agent", required_argument, NULL, 'U'},
+
+      {NULL, 0, NULL, 0}
+    };
+
+    for (int c; (c = getopt_long_only(argc, argv, "u:p:k:A:C:S:T:U:h:p:", opts, NULL)) != -1; ) {
+      switch (c) {
+        case 'u':
+          username = strdup(optarg);
+          break;
+
+        case 'p':
+          password = strdup(optarg);
+          break;
+
+        case 'c':
+          credentials_blob = strdup(optarg);
+          break;
+
+        case 'k':
+          state->credentials_blob_filename = strdup(optarg);
+          session_callbacks.credentials_blob_updated = &credentials_blob_updated;
+          break;
+
+        case 'A':
+          read_application_key(optarg, &session_config);
+          break;
+
+        case 'C':
+          session_config.cache_location = strdup(optarg);
+          break;
+
+        case 'S':
+          session_config.settings_location = strdup(optarg);
+          break;
+
+        case 'T':
+          session_config.tracefile = strdup(optarg);
+          break;
+
+        case 'U':
+          session_config.user_agent = strdup(optarg);
+          break;
+      }
+    }
 
     sp_session *session;
     sp_error session_create_error = sp_session_create(&session_config,
@@ -71,7 +179,12 @@ int main(int argc, char **argv) {
              sp_error_message(session_create_error));
     } else {
       // Log in to Spotify
-      sp_session_login(session, username, password, false, NULL);
+      if (relogin) {
+        sp_session_relogin(session);
+      } else {
+        sp_session_login(session, username, password, remember_me,
+                         credentials_blob);
+      }
 
       event_base_dispatch(state->event_base);
     }

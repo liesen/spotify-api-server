@@ -6,6 +6,8 @@
 struct state {
   sp_session *session;
 
+  char *credentials_blob_filename;
+
   struct event_base *event_base;
   struct event *async;
   struct event *timer;
@@ -18,6 +20,8 @@ struct state {
 
   int exit_status;
 };
+
+void credentials_blob_updated(sp_session *session, const char *blob);
 
 void logged_in(sp_session *session, sp_error error);
 

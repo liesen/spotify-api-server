@@ -896,6 +896,29 @@ static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
   }
 }
 
+void credentials_blob_updated(sp_session *session, const char *blob) {
+  syslog(LOG_DEBUG, "credentials_blob_updated");
+  struct state *state = sp_session_userdata(session);
+
+  if (state->credentials_blob_filename == NULL) {
+    syslog(LOG_DEBUG, "Not configured to store credentials");
+    return;
+  }
+
+  FILE *fp = fopen(state->credentials_blob_filename, "w+");
+
+  if (!fp) {
+    syslog(LOG_DEBUG, "Could not open credentials file for writing");
+    return;
+  }
+
+  size_t blob_size = strlen(blob);
+  fwrite(blob, 1, blob_size, fp);
+  fclose(fp);
+  syslog(LOG_DEBUG, "Wrote new credentials to %s",
+         state->credentials_blob_filename);
+}
+
 // Catches SIGINT and exits gracefully
 void sigint_handler(evutil_socket_t socket, short what, void *userdata) {
   syslog(LOG_DEBUG, "signal_handler\n");
