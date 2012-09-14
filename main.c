@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
 
     if (session_config.application_key_size == 0) {
       fprintf(stderr, "You didn't specify a path to your application key (use"
-                      " -A/--application_key).\n");
+                      " -A/--application-key).\n");
     } else {
       sp_session *session;
       sp_error session_create_error = sp_session_create(&session_config,

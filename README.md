@@ -37,22 +37,23 @@ It's a web server (listens at port 1337 by default) that talks to Spotify using 
 ## How to build
 
 1. Make sure you have the required libraries:
+
     * [libspotify](http://developer.spotify.com/en/libspotify/)
     * subversion (libsvn-dev) and its dependency, libapr
     * [libevent2](http://monkey.org/~provos/libevent/)
     * [jansson](http://www.digip.org/jansson/) 2.x
 
-1. Run `make`
+1. Run `make`.
 
 ## How to run
 
 Necessary requirements:
 
-* A *Spotify premium account*
-* An application key file in binary format. Get it [from Spotify](https://developer.spotify.com/technologies/libspotify/keys/)
+* A *Spotify premium account*.
+* An application key file in binary format. Get it [from Spotify](https://developer.spotify.com/technologies/libspotify/keys/).
 
 Start the server:
 
     ./server --application-key <path to appkey> --username <username> --password <password>`
 
-Read the source for more arguments, like setting the cache location (`-C`) and which port to listen on (`-P`).
+Read the source for more command line arguments, like setting the cache location (`-C`), which port to listen on (`-P`) or how to login without using a password (`-k`).
