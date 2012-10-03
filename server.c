@@ -444,9 +444,9 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
                                     struct evhttp_request *request,
                                     void *userdata) {
   sp_session *session = userdata;
-  const char *uri = evhttp_request_get_uri(request);
+  const char *uri = evhttp_request_get_uri(request->uri_elems);
   struct evkeyvalq query_fields;
-  evhttp_parse_query(uri, &query_fields);
+  evhttp_parse_query_str(uri, &query_fields);
 
   // Parse index
   const char *index_field = evhttp_find_header(&query_fields, "index");
@@ -514,9 +514,9 @@ static void put_playlist_remove_tracks(sp_playlist *playlist,
                                        struct evhttp_request *request,
                                        void *userdata) {
   // sp_session *session = userdata;
-  const char *uri = evhttp_request_get_uri(request);
+  const char *uri = evhttp_request_get_uri(request->uri_elems);
   struct evkeyvalq query_fields;
-  evhttp_parse_query(uri, &query_fields);
+  evhttp_parse_query_str(uri, &query_fields);
 
   // Parse index
   const char *index_field = evhttp_find_header(&query_fields, "index");
@@ -719,9 +719,10 @@ static void handle_user_request(struct evhttp_request *request,
         put_user_inbox(canonical_username, request, session);
       }
       break;
+      
+      default:
+        evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
   }
-
-  evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
 }
 
 // Request dispatcher
