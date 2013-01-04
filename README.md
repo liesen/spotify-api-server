@@ -54,4 +54,14 @@ Start the server:
 
     ./server --application-key <path to appkey> --username <username> --password <password>`
 
-Read the source for more command line arguments, like setting the cache location (`-C`), which port to listen on (`-P`) or how to login without using a password (`-k`).
+Read the source for more command line arguments, like setting the cache location (`-C`), which port to listen on (`-P`).
+
+### Using credentials to log in
+
+First get the credentials file from Spotify
+
+    ./server -A spotify_appkey.key -u username -p password -k .credentials
+
+Then start the server using the contents of the credentials file
+
+    cat .credentials | xargs ./server -A spotify_appkey.key -u username -c
