@@ -786,7 +786,6 @@ static void handle_request(struct evhttp_request *request,
     switch (http_method) {
       case EVHTTP_REQ_PUT:
       case EVHTTP_REQ_POST:
-        // TODO(liesen): Add code to create playlists
         put_playlist(NULL, request, session);
         break;
 
