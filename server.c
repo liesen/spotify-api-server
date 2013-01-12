@@ -549,7 +549,7 @@ static void put_playlist_remove_tracks(sp_playlist *playlist,
   struct playlist_handler *handler = register_playlist_callbacks(
       playlist, request, &get_playlist,
       &playlist_update_in_progress_callbacks, NULL);
-  sp_error remove_tracks_error = sp_playlist_remove_tracks(playlist, tracks, 
+  sp_error remove_tracks_error = sp_playlist_remove_tracks(playlist, tracks,
                                                            count);
 
   if (remove_tracks_error != SP_ERROR_OK) {
@@ -642,8 +642,8 @@ static void put_playlist_patch(sp_playlist *playlist,
   // Apply diff
   apr_pool_t *pool = state->pool;
   svn_diff_t *diff;
-  svn_error_t *diff_error = diff_playlist_tracks(&diff, playlist, tracks, 
-                                                 num_valid_tracks, pool); 
+  svn_error_t *diff_error = diff_playlist_tracks(&diff, playlist, tracks,
+                                                 num_valid_tracks, pool);
 
   if (diff_error != SVN_NO_ERROR) {
     free(tracks);
