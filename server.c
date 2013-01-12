@@ -453,9 +453,7 @@ static void put_playlist_add_tracks(sp_playlist *playlist,
   int index;
 
   if (index_field == NULL || sscanf(index_field, "%d", &index) <= 0) {
-    send_error(request, HTTP_BADREQUEST,
-               "Bad parameter: index must be numeric");
-    return;
+    index = sp_playlist_num_tracks(playlist);
   }
 
   // Parse JSON
