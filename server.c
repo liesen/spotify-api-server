@@ -910,38 +910,6 @@ static void handle_request(struct evhttp_request *request,
   free(uri);
 }
 
-static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata);
-
-static sp_playlistcontainer_callbacks playlistcontainer_callbacks = {
-  .container_loaded = playlistcontainer_loaded
-};
-
-static void playlistcontainer_loaded(sp_playlistcontainer *pc, void *userdata) {
-  syslog(LOG_DEBUG, "playlistcontainer_loaded\n");
-  sp_session *session = userdata;
-  struct state *state = sp_session_userdata(session);
-
-  sp_playlistcontainer_remove_callbacks(pc, &playlistcontainer_callbacks, session);
-
-  state->http = evhttp_new(state->event_base);
-  evhttp_set_timeout(state->http, 60);
-  evhttp_set_gencb(state->http, &handle_request, state);
-
-  // Bind HTTP server
-  int bind = evhttp_bind_socket(state->http, state->http_host,
-                                state->http_port);
-
-  if (bind == -1) {
-    syslog(LOG_WARNING, "Could not bind HTTP server socket to %s:%d",
-           state->http_host, state->http_port);
-    sp_session_logout(session);
-    return;
-  }
-
-  syslog(LOG_DEBUG, "HTTP server listening on %s:%d", state->http_host,
-         state->http_port);
-}
-
 void credentials_blob_updated(sp_session *session, const char *blob) {
   syslog(LOG_DEBUG, "credentials_blob_updated");
   struct state *state = sp_session_userdata(session);
@@ -996,10 +964,23 @@ void logged_in(sp_session *session, sp_error error) {
 
   state->session = session;
   evsignal_add(state->sigint, NULL);
+  state->http = evhttp_new(state->event_base);
+  evhttp_set_timeout(state->http, 60);
+  evhttp_set_gencb(state->http, &handle_request, state);
 
-  sp_playlistcontainer *pc = sp_session_playlistcontainer(session);
-  sp_playlistcontainer_add_callbacks(pc, &playlistcontainer_callbacks,
-                                     session);
+  // Bind HTTP server
+  int bind = evhttp_bind_socket(state->http, state->http_host,
+                                state->http_port);
+
+  if (bind == -1) {
+    syslog(LOG_WARNING, "Could not bind HTTP server socket to %s:%d",
+           state->http_host, state->http_port);
+    sp_session_logout(session);
+    return;
+  }
+
+  syslog(LOG_DEBUG, "HTTP server listening on %s:%d", state->http_host,
+         state->http_port);
 }
 
 void process_events(evutil_socket_t socket, short what, void *userdata) {
