@@ -324,6 +324,7 @@ static void get_user_playlists(sp_playlistcontainer *pc,
     json_array_append_new(playlists, playlist_json);
   }
 
+  sp_playlistcontainer_release(pc);
   send_reply_json(request, status, status == HTTP_OK ? "OK" : "Partial Content",
                   json);
 }
