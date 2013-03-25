@@ -443,16 +443,15 @@ static void put_playlist(sp_playlist *playlist,
 static void delete_playlist(sp_playlist *playlist,
                          struct evhttp_request *request,
                          void *userdata) {
-
   struct state *state = userdata;
   sp_session *session = state->session;
   sp_playlistcontainer *pc = sp_session_playlistcontainer(session);
 
-  for(int i=1; i<sp_playlistcontainer_num_playlists(pc); i++){
-    if(sp_playlistcontainer_playlist(pc, i) == playlist){
-      if (playlist == NULL) {
-        send_error(request, HTTP_ERROR, "Unable to delete unexisting playlist");
-      } else {
+  if (playlist == NULL) {
+    send_error(request, HTTP_ERROR, "Unable to delete unexisting playlist");
+  } else {
+    for(int i=1; i<sp_playlistcontainer_num_playlists(pc); i++){
+      if(sp_playlistcontainer_playlist(pc, i) == playlist){
         struct playlist_handler *handler = register_playlist_callbacks(
             playlist, request, &get_playlist,
             &playlist_update_in_progress_callbacks, NULL);
@@ -705,7 +704,6 @@ static void handle_user_request(struct evhttp_request *request,
                                 char *action,
                                 const char *canonical_username,
                                 sp_session *session) {
-
   if (action == NULL) {
     evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
     return;
