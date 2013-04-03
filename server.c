@@ -440,6 +440,43 @@ static void put_playlist(sp_playlist *playlist,
   }
 }
 
+static void delete_playlist(sp_playlist *playlist,
+                         struct evhttp_request *request,
+                         void *userdata) {
+  struct state *state = userdata;
+  sp_session *session = state->session;
+  sp_playlistcontainer *pc = sp_session_playlistcontainer(session);
+
+  if (playlist == NULL) {
+    send_error(request, HTTP_ERROR, "Unable to delete unexisting playlist");
+  } else {
+    for(int i=0; i<sp_playlistcontainer_num_playlists(pc); i++){
+      if(sp_playlistcontainer_playlist_type(pc, i) == SP_PLAYLIST_TYPE_PLAYLIST){
+        sp_playlist* current_playlist = sp_playlistcontainer_playlist(pc, i);
+
+        if(current_playlist == playlist){
+          struct playlist_handler *handler = register_playlist_callbacks(
+              playlist, request, &get_playlist,
+              &playlist_update_in_progress_callbacks, NULL);
+
+          sp_error remove_playlist_error = sp_playlistcontainer_remove_playlist(pc, i);
+
+          if (remove_playlist_error == SP_ERROR_OK) {
+            return;
+          } else{
+            sp_playlist_remove_callbacks(playlist, handler->playlist_callbacks, handler);
+            free(handler);
+            send_error_sp(request, HTTP_BADREQUEST, remove_playlist_error);
+            return;
+          }
+        }
+      }
+    }
+
+    send_error(request, HTTP_BADREQUEST, "Unable to delete unexisting playlist");
+  }
+}
+
 static void put_playlist_add_tracks(sp_playlist *playlist,
                                     struct evhttp_request *request,
                                     void *userdata) {
@@ -738,6 +775,7 @@ static void handle_request(struct evhttp_request *request,
     case EVHTTP_REQ_GET:
     case EVHTTP_REQ_PUT:
     case EVHTTP_REQ_POST:
+    case EVHTTP_REQ_DELETE:
       break;
 
     default:
@@ -856,6 +894,13 @@ static void handle_request(struct evhttp_request *request,
         callback_userdata = state;
         request_callback = &put_playlist_patch;
       }
+    }
+    break;
+
+  case EVHTTP_REQ_DELETE:
+    {
+      callback_userdata = state;
+      request_callback = &delete_playlist;
     }
     break;
   }

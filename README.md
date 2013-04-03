@@ -29,6 +29,8 @@ and GPL.
     POST /playlist/{uri}/collaborative?enabled=<boolean> -> <playlist>
     POST /playlist/{uri}/patch <- [<track URI>] -> <playlist>
 
+    DELETE /playlist/{uri}/delete -> <playlist>
+
 
 `patch` replaces all tracks in a playlist with as few `add`s and `remove`s as
 possible by first performing a *diff* between the playlist and the new
