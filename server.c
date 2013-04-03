@@ -447,25 +447,14 @@ static void delete_playlist(sp_playlist *playlist,
   sp_session *session = state->session;
   sp_playlistcontainer *pc = sp_session_playlistcontainer(session);
 
-  sp_link* playlist_link;
-  char* playlist_link_string[255];
-  playlist_link = sp_link_create_from_playlist(playlist);
-  sp_link_as_string(playlist_link, playlist_link_string, sizeof(playlist_link_string));
-  sp_link_release(playlist_link);
-
   if (playlist == NULL) {
     send_error(request, HTTP_ERROR, "Unable to delete unexisting playlist");
   } else {
-    for(int i=1; i<sp_playlistcontainer_num_playlists(pc); i++){
+    for(int i=0; i<sp_playlistcontainer_num_playlists(pc); i++){
       if(sp_playlistcontainer_playlist_type(pc, i) == SP_PLAYLIST_TYPE_PLAYLIST){
         sp_playlist* current_playlist = sp_playlistcontainer_playlist(pc, i);
-        sp_link* current_playlist_link = sp_link_create_from_playlist(current_playlist);
 
-        char* current_playlist_link_string[255];
-        sp_link_as_string(current_playlist_link, current_playlist_link_string, sizeof(current_playlist_link_string));
-        sp_link_release(current_playlist_link);
-
-        if(strcmp(playlist_link_string, current_playlist_link_string) == 0){
+        if(current_playlist == playlist){
           struct playlist_handler *handler = register_playlist_callbacks(
               playlist, request, &get_playlist,
               &playlist_update_in_progress_callbacks, NULL);
