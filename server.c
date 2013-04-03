@@ -467,6 +467,7 @@ static void delete_playlist(sp_playlist *playlist,
             sp_playlist_remove_callbacks(playlist, handler->playlist_callbacks, handler);
             free(handler);
             send_error_sp(request, HTTP_BADREQUEST, remove_playlist_error);
+            return;
           }
         }
       }
