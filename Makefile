@@ -9,7 +9,7 @@ override LDFLAGS += $(shell apr-1-config --ldflags)
 
 all: server
 
-server:
+server: $(SOURCES)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(SOURCES) $(LDFLAGS) -o $@ $(LDLIBS)
 
 clean:
