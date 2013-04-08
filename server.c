@@ -463,14 +463,16 @@ static void delete_playlist(sp_playlist *playlist,
   sp_playlistcontainer *pc = sp_session_playlistcontainer(session);
 
   for (int i = 0; i < sp_playlistcontainer_num_playlists(pc); i++) {
-    if (sp_playlistcontainer_playlist_type(pc, i) == SP_PLAYLIST_TYPE_PLAYLIST &&
-        sp_playlistcontainer_playlist(pc, i) == playlist) {
-      sp_error remove_playlist_error = sp_playlistcontainer_remove_playlist(pc, i);
+    if (sp_playlistcontainer_playlist_type(pc, i) != SP_PLAYLIST_TYPE_PLAYLIST)
+      continue;
 
-      if (remove_playlist_error == SP_ERROR_OK) {
+    if (sp_playlistcontainer_playlist(pc, i) != playlist) {
+      sp_error remove_error = sp_playlistcontainer_remove_playlist(pc, i);
+
+      if (remove_error == SP_ERROR_OK) {
         send_reply(request, HTTP_OK, "OK", NULL);
       } else {
-        send_error_sp(request, HTTP_BADREQUEST, remove_playlist_error);
+        send_error_sp(request, HTTP_BADREQUEST, remove_error);
       }
 
       return;
