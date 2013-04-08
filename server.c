@@ -753,6 +753,8 @@ static void handle_user_request(struct evhttp_request *request,
               &playlistcontainer_loaded_callbacks,
               session);
         }
+
+        return;
       } else if (strncmp(action, "starred", 7) == 0) {
         sp_playlist *playlist = sp_session_starred_for_user_create(session,
             canonical_username);
@@ -764,6 +766,8 @@ static void handle_user_request(struct evhttp_request *request,
               &playlist_state_changed_callbacks,
               session);
         }
+
+        return;
       }
       break;
 
@@ -771,13 +775,12 @@ static void handle_user_request(struct evhttp_request *request,
     case EVHTTP_REQ_POST:
       if (strncmp(action, "inbox", 5) == 0) {
         put_user_inbox(canonical_username, request, session);
+        return;
       }
       break;
-
-    default:
-      evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
-      break;
   }
+
+  evhttp_send_error(request, HTTP_BADREQUEST, "Bad Request");
 }
 
 // Request dispatcher
