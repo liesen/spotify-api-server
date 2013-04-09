@@ -1,4 +1,4 @@
-var libspotify = require('./lib/libspotify');
+var libspotify = require('./ffi/libspotify');
 
 // Merge libspotify.libspotify with libspotify
 for (var key in libspotify.libspotify) {

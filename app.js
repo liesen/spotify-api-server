@@ -1,5 +1,6 @@
 var express = require('express');
 var ffi = require('ffi');
+var ref = require('ref');
 var libspotify = require('./libspotify');
 
 var app = module.exports = express();
@@ -43,9 +44,34 @@ app.param('playlistUri', function (req, res, next, uri) {
   }
 });
 
+function getTrackUri(track) {
+  // TODO(liesen): well this doesn't work...
+  var link = libspotify.sp_link_create_from_track(track, 0);
+  var uri = new Buffer(37);
+  uri.writeCString('spotify:track:40bEw2qJVCnTwQlgNj9yli');
+  var len = libspotify.sp_link_as_string(link, uri, uri.length);
+  libspotify.sp_link_release(link);
+  return uri;
+}
+
 app.get('/playlists/:playlistUri', function (req, res) {
   var playlist = req.playlist;
   var name = libspotify.sp_playlist_name(playlist);
-  res.json({uri: req.params.playlistUri, name: name});
+  var numTracks = libspotify.sp_playlist_num_tracks(playlist);
+  var tracks = [];
+
+  for (var i = 0; i < numTracks; i++) {
+    // var track = libspotify.sp_playlist_track(playlist, i);
+    // var trackUri = getTrackUri(track);
+    // tracks.push(trackUri);
+  }
+
+  res.json({
+    uri: req.params.playlistUri,
+    title: libspotify.sp_playlist_name(playlist),
+    description: libspotify.sp_playlist_get_description(playlist),
+    subscriberCount: libspotify.sp_playlist_num_subscribers(playlist),
+    tracks: tracks
+  });
 });
 
