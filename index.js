@@ -1,13 +1,7 @@
-var ref = require('ref');
 var ffi = require('ffi');
-var libspotify = require('./lib/libspotify');
+var libspotify = require('./libspotify');
+var ref = require('ref');
 var util = require('util');
-
-for (var key in libspotify.libspotify) {
-  libspotify[key] = libspotify.libspotify[key];
-}
-
-delete libspotify.libspotify;
 
 var sessionPtr = ref.alloc(libspotify.sp_sessionPtr);
 var timeoutPtr = ref.alloc('int');
@@ -26,8 +20,7 @@ function process_events(session) {
 }
 
 // Web app
-var express = require('express');
-var app = express();
+var app = require('./app');
 var server;
 
 var session_config = new libspotify.sp_session_config;
@@ -42,6 +35,7 @@ session_callbacks['ref.buffer'].fill(0);
 
 session_callbacks.logged_in = ffi.Callback('void', [libspotify.sp_sessionPtr, 'int'], function (session, error) {
   util.debug('logged_in: ' + libspotify.CONSTANTS.sp_error[error]);
+  app.set('session', session);
   server = app.listen(3000);
 
   process.on('SIGINT', function () {
@@ -116,48 +110,3 @@ if (login_error !== libspotify.CONSTANTS.sp_error.SP_ERROR_OK) {
 process.on('exit', function () {
   session_callbacks;
 });
-
-app.param('playlistUri', function (req, res, next, uri) {
-  var linkPtr = libspotify.sp_link_create_from_string(uri);
-
-  if (!linkPtr) {
-    return next(new Error('Unknown playlist URI: ' + uri));
-  }
-
-  var playlist = libspotify.sp_playlist_create(sessionPtr, linkPtr);
-  libspotify.sp_link_release(linkPtr);
-
-  function ok(playlist) {
-    req.playlist = playlist;
-    res.on('finish', function () {
-      libspotify.sp_playlist_release(playlist);
-    });
-    return next(null);
-  }
-
-  if (libspotify.sp_playlist_is_loaded(playlist)) {
-    return ok(playlist);
-  }
-
-  var callbacks = new libspotify.sp_playlist_callbacks;
-  callbacks['ref.buffer'].fill(0);
-  callbacks.playlist_state_changed = ffi.Callback('void', [libspotify.sp_playlistPtr, 'pointer'], function (playlist, userdata) {
-    if (libspotify.sp_playlist_is_loaded(playlist)) {
-      libspotify.sp_playlist_remove_callbacks(playlist, userdata, userdata);
-      ok(playlist);
-    }
-  });
-
-  var error = libspotify.sp_playlist_add_callbacks(playlist, callbacks.ref(), callbacks.ref());
-
-  if (error !== libspotify.CONSTANTS.sp_error.SP_ERROR_OK) {
-    return next(new Error(libspotify.sp_error_message(error)));
-  }
-});
-
-app.get('/playlists/:playlistUri', function (req, res) {
-  var playlist = req.playlist;
-  var name = libspotify.sp_playlist_name(playlist);
-  res.json({uri: req.params.playlistUri, name: name});
-});
-
