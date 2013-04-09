@@ -36,10 +36,15 @@ session_callbacks['ref.buffer'].fill(0);
 
 session_callbacks.logged_in = ffi.Callback('void', [libspotify.sp_sessionPtr, 'int'], function (session, error) {
   debug('logged_in', libspotify.CONSTANTS.sp_error[error]);
+
+  process.on('SIGINT', function () {
+    libspotify.libspotify.sp_session_logout(sessionPtr);
+  });
 });
 
 session_callbacks.logged_out = ffi.Callback('void', [libspotify.sp_sessionPtr], function (session) {
   debug('logged_out');
+  clearTimeout(timeoutId);
 });
 
 session_callbacks.log_message = ffi.Callback('void', [libspotify.sp_sessionPtr, 'string'], function (session, message) {
