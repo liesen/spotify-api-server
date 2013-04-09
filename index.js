@@ -25,6 +25,11 @@ function process_events(session) {
   timeoutId = setTimeout(process_events, timeoutPtr.deref(), session);
 }
 
+// Web app
+var express = require('express');
+var app = express();
+var server;
+
 var session_config = new libspotify.sp_session_config;
 session_config['ref.buffer'].fill(0);
 session_config.api_version = 12;
@@ -37,6 +42,7 @@ session_callbacks['ref.buffer'].fill(0);
 
 session_callbacks.logged_in = ffi.Callback('void', [libspotify.sp_sessionPtr, 'int'], function (session, error) {
   util.debug('logged_in: ' + libspotify.CONSTANTS.sp_error[error]);
+  server = app.listen(3000);
 
   process.on('SIGINT', function () {
     libspotify.sp_session_logout.async(sessionPtr, function () { });
@@ -45,6 +51,7 @@ session_callbacks.logged_in = ffi.Callback('void', [libspotify.sp_sessionPtr, 'i
 
 session_callbacks.logged_out = ffi.Callback('void', [libspotify.sp_sessionPtr], function (session) {
   util.debug('logged_out');
+  server.close();
   clearTimeout(timeoutId);
 });
 
@@ -110,10 +117,6 @@ process.on('exit', function () {
   session_callbacks;
 });
 
-// Web app
-var express = require('express');
-var app = express();
-
 app.param('playlistUri', function (req, res, next, uri) {
   var linkPtr = libspotify.sp_link_create_from_string(uri);
 
@@ -157,6 +160,4 @@ app.get('/playlists/:playlistUri', function (req, res) {
   var name = libspotify.sp_playlist_name(playlist);
   res.json({uri: req.params.playlistUri, name: name});
 });
-
-app.listen(3000);  // Don't connect too soon, okay?
 
