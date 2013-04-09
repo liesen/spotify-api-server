@@ -114,13 +114,19 @@ app.param('playlistUri', function (req, res, next, uri) {
     return next(new Error('Unknown playlist URI: ' + uri));
   }
 
-  // req.pause();
   var playlist = libspotify.libspotify.sp_playlist_create(sessionPtr, linkPtr);
   libspotify.libspotify.sp_link_release(linkPtr);
 
-  if (libspotify.libspotify.sp_playlist_is_loaded(playlist)) {
+  function ok(playlist) {
     req.playlist = playlist;
+    res.on('finish', function () {
+      libspotify.libspotify.sp_playlist_release(playlist);
+    });
     return next(null);
+  }
+
+  if (libspotify.libspotify.sp_playlist_is_loaded(playlist)) {
+    return ok(playlist);
   }
 
   var callbacks = new libspotify.sp_playlist_callbacks;
@@ -128,8 +134,7 @@ app.param('playlistUri', function (req, res, next, uri) {
   callbacks.playlist_state_changed = ffi.Callback('void', [libspotify.sp_playlistPtr, 'pointer'], function (playlist, userdata) {
     if (libspotify.libspotify.sp_playlist_is_loaded(playlist)) {
       libspotify.libspotify.sp_playlist_remove_callbacks(playlist, userdata, userdata);
-      req.playlist = playlist;
-      next(null);
+      ok(playlist);
     }
   });
 
@@ -143,7 +148,7 @@ app.param('playlistUri', function (req, res, next, uri) {
 app.get('/playlists/:playlistUri', function (req, res) {
   var playlist = req.playlist;
   var name = libspotify.libspotify.sp_playlist_name(playlist);
-  libspotify.libspotify.sp_playlist_release(playlist);
+  // libspotify.libspotify.sp_playlist_release(playlist);
   res.json({uri: req.params.playlistUri, name: name});
 });
 
