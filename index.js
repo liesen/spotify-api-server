@@ -3,7 +3,6 @@ var libspotify = require('./libspotify');
 var ref = require('ref');
 var util = require('util');
 
-var sessionPtr = ref.alloc(libspotify.sp_sessionPtr);
 var timeoutPtr = ref.alloc('int');
 var timeoutId;
 
@@ -39,7 +38,7 @@ session_callbacks.logged_in = ffi.Callback('void', [libspotify.sp_sessionPtr, 'i
   server = app.listen(3000);
 
   process.on('SIGINT', function () {
-    libspotify.sp_session_logout.async(sessionPtr, function () { });
+    libspotify.sp_session_logout.async(session, function () { });
   });
 });
 
@@ -93,14 +92,11 @@ var argv = require('optimist').
 
 var application_key = require('fs').readFileSync(argv.A);
 session_config.application_key = application_key;
-console.log(session_config.application_key);
-console.log(session_config.application_key.length);
 session_config.application_key_size = +application_key.length;
 var sessionPtrPtr = ref.alloc(ref.refType(libspotify.sp_sessionPtr));
 var create_error = libspotify.sp_session_create(session_config.ref(), sessionPtrPtr);
 util.debug('session_create: ' + libspotify.CONSTANTS.sp_error[create_error]);
-sessionPtr = sessionPtrPtr.deref();
-var login_error = libspotify.sp_session_login(sessionPtr, argv.u, argv.p, 0, null);
+var login_error = libspotify.sp_session_login(sessionPtrPtr.deref(), argv.u, argv.p, 0, null);
 
 if (login_error !== libspotify.CONSTANTS.sp_error.SP_ERROR_OK) {
   throw new Error(libspotify.CONSTANTS.sp_error[login_error]);
