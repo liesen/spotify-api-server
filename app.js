@@ -5,15 +5,15 @@ var libspotify = require('./libspotify');
 var app = module.exports = express();
 
 app.param('playlistUri', function (req, res, next, uri) {
-  var sessionPtr = app.get('session');
-  var linkPtr = libspotify.sp_link_create_from_string(uri);
+  var session = app.get('session');
+  var link = libspotify.sp_link_create_from_string(uri);
 
-  if (!linkPtr) {
+  if (!link) {
     return next(new Error('Unknown playlist URI: ' + uri));
   }
 
-  var playlist = libspotify.sp_playlist_create(sessionPtr, linkPtr);
-  libspotify.sp_link_release(linkPtr);
+  var playlist = libspotify.sp_playlist_create(session, link);
+  libspotify.sp_link_release(link);
 
   function ok(playlist) {
     req.playlist = playlist;
