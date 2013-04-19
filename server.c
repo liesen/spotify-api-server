@@ -728,6 +728,54 @@ static void put_playlist_patch(sp_playlist *playlist,
                               &playlist_update_in_progress_callbacks, NULL);
 }
 
+static void put_playlist_rename(sp_playlist *playlist,
+                               struct evhttp_request *request,
+                               void *userdata) {
+  struct state *state = userdata;
+  struct evbuffer *buf = evhttp_request_get_input_buffer(request);
+  size_t buflen = evbuffer_get_length(buf);
+  json_error_t loads_error;
+  json_t *playlist_json = read_request_body_json(request, &loads_error);
+
+  if (playlist_json == NULL) {
+    send_error(request, HTTP_BADREQUEST,
+               loads_error.text ? loads_error.text : "Unable to parse JSON");
+    return;
+  }
+
+  if (!json_is_object(playlist_json)) {
+    send_error(request, HTTP_BADREQUEST, "Invalid playlist object");
+    return;
+  }
+
+  json_t *title_json = json_object_get(playlist_json, "title");
+  if (title_json == NULL) {
+    json_decref(playlist_json);
+    send_error(request, HTTP_BADREQUEST,
+               "Invalid playlist: title is missing");
+    return;
+  }
+
+  if (!json_is_string(title_json)) {
+    json_decref(playlist_json);
+    send_error(request, HTTP_BADREQUEST,
+               "Invalid playlist: title is not a string");
+    return;
+  }
+
+  char title[kMaxPlaylistTitleLength];
+  strncpy(title, json_string_value(title_json), kMaxPlaylistTitleLength);
+  json_decref(playlist_json);
+
+  if(sp_playlist_rename(playlist, title) == SP_ERROR_OK){
+    register_playlist_callbacks(playlist, request, &get_playlist,
+                                &playlist_state_changed_callbacks, NULL);
+  }
+  else {
+    send_error(request, HTTP_BADREQUEST, "Unable to rename playlist");
+  }
+}
+
 static void handle_user_request(struct evhttp_request *request,
                                 char *action,
                                 const char *canonical_username,
@@ -913,6 +961,9 @@ static void handle_request(struct evhttp_request *request,
       } else if (strncmp(action, "patch", 5) == 0) {
         callback_userdata = state;
         request_callback = &put_playlist_patch;
+      } else if (strncmp(action, "name", 4) == 0) {
+        callback_userdata = state;
+        request_callback = &put_playlist_rename;
       }
     }
     break;
