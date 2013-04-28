@@ -38,14 +38,16 @@ session_callbacks.logged_in = ffi.Callback('void', [libspotify.sp_sessionPtr, 'i
   server = app.listen(3000);
 
   process.on('SIGINT', function () {
-    libspotify.sp_session_logout.async(session, function () { });
+    libspotify.sp_session_logout.async(session, function () {
+    });
   });
 });
 
 session_callbacks.logged_out = ffi.Callback('void', [libspotify.sp_sessionPtr], function (session) {
   util.debug('logged_out');
-  server.close();
   clearTimeout(timeoutId);
+  timeoutId.unref();
+  server.close();
 });
 
 session_callbacks.log_message = ffi.Callback('void', [libspotify.sp_sessionPtr, 'string'], function (session, message) {
