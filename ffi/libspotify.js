@@ -3,6 +3,7 @@ var FFI = require('ffi'),
     Struct = require('ref-struct'),
     ref = require('ref');
 var voidPtr = ref.refType(ref.types.void);
+var charPtr = ref.refType(ref.types.char);
 exports.CONSTANTS = {
     sp_error: {
         '0': 'SP_ERROR_OK',
@@ -441,7 +442,7 @@ exports.libspotify = new FFI.Library('libspotify', {
     sp_offline_sync_get_status: [ref.types.uchar, [sp_sessionPtr, sp_offline_sync_statusPtr]],
     sp_offline_time_left: [ref.types.int32, [sp_sessionPtr]],
     sp_session_user_country: [ref.types.int32, [sp_sessionPtr]],
-    sp_link_create_from_string: [sp_link, [ref.types.CString]],
+    sp_link_create_from_string: [sp_linkPtr, [ref.types.CString]],
     sp_link_create_from_track: [sp_linkPtr, [sp_trackPtr, ref.types.int32]],
     sp_link_create_from_album: [sp_linkPtr, [sp_album]],
     sp_link_create_from_album_cover: [sp_linkPtr, [sp_albumPtr, ref.types.uint32]],
@@ -452,7 +453,7 @@ exports.libspotify = new FFI.Library('libspotify', {
     sp_link_create_from_playlist: [sp_linkPtr, [sp_playlistPtr]],
     sp_link_create_from_user: [sp_linkPtr, [sp_userPtr]],
     sp_link_create_from_image: [sp_linkPtr, [sp_image]],
-    sp_link_as_string: [ref.types.int32, [sp_linkPtr, ref.types.CString, ref.types.int32]],
+    sp_link_as_string: [ref.types.int32, [sp_linkPtr, charPtr, ref.types.int32]],
     sp_link_type: [ref.types.uint32, [sp_linkPtr]],
     sp_link_as_track: [sp_trackPtr, [sp_linkPtr]],
     sp_link_as_track_and_offset: [sp_trackPtr, [sp_linkPtr, voidPtr]],
