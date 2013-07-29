@@ -33,7 +33,7 @@ app.param('playlistUri', function (req, res, next, uri) {
   var session = app.get('session');
   var link = libspotify.sp_link_create_from_string(uri);
 
-  if (!link) {
+  if (link.isNull()) {
     return next(new Error('Unknown playlist URI: ' + uri));
   }
 
@@ -46,12 +46,15 @@ app.param('playlistUri', function (req, res, next, uri) {
     },
     function (playlist, callback) {
       req.playlist = playlist;
-      res.on('finish', function () {
-        libspotify.sp_playlist_release(playlist);
-      });
       callback(null);
     }
-  ], next);
+  ], function (err) {
+    res.on('finish', function () {
+      libspotify.sp_playlist_release(playlist);
+      playlist = null;
+    });
+    next(err);
+  });
 });
 
 var TracksArray = require('ref-array')(libspotify.sp_trackPtr);
@@ -82,35 +85,17 @@ app.post('/playlists/:playlistUri/add', function (req, res, next) {
   var session = app.get('session');
   var str = 'spotify:track:67N4STz5lAYuxOgR66oN06';
 
-  async.waterfall([
-    function (callback) {
-      libspotify.sp_link_create_from_string.async(str, callback);
-    },
-    function (link, callback) {
-      async.waterfall([
-        function (callback) {
-          libspotify.sp_link_as_track.async(link, callback);
-        },
-        function (track, callback) {
-          var tracks = new TracksArray(1);
-          tracks[0] = track;
-          console.log('track', track);
-          console.log('track.name', libspotify.sp_track_name(track));
-          console.log('tracks', tracks);
-          console.log('tracks[0]', tracks[0]);
-          libspotify.sp_playlist_add_tracks.async(req.playlist, tracks.ref(), 1, 0, session, callback);
-        }
-      ], function (err, ok) {
-        console.log('done', err, ok);
-        libspotify.sp_link_release.async(link, function (e) {
-          next(err || e);
-        });
-      });
-    }
-  ], function (err) {
-    console.log('fail to get link');
-    next(err);
-  });
+  var link = libspotify.sp_link_create_from_string(str);
+  var track = libspotify.sp_link_as_track(link);
+  libspotify.sp_link_release(link);
+  var tracks = new TracksArray(1);
+  tracks[0] = track;
+  console.log('track', track);
+  console.log('track.name', libspotify.sp_track_name(track));
+  console.log('tracks', tracks);
+  console.log('tracks[0]', tracks[0]);
+  var e = libspotify.sp_playlist_add_tracks(req.playlist, tracks, 1, 0, session);
+  console.log('e', e);
 });
 
 app.post('/playlists', function (req, res, next) {
@@ -131,6 +116,56 @@ app.post('/playlists', function (req, res, next) {
     res.json(playlistAsJson(playlist));
   });
 });
+
+app.get('/playlists', function (req, res, next) {
+  var session = app.get('session');
+  var pc = libspotify.sp_session_playlistcontainer(session);
+  playlists(pc, req, res, next);
+});
+
+app.get('/users/:username/playlists', function (req, res, next) {
+  var session = app.get('session');
+  console.log(req.param('username'));
+  libspotify.sp_session_publishedcontainer_for_user_create.async(session, req.param('username'), function (err, pc) {
+    res.on('finish', function () {
+      libspotify.sp_playlistcontainer_release(pc);
+    });
+    playlists(pc, req, res, next);
+  });
+});
+
+function playlists(pc, req, res, next) {
+  if (!libspotify.sp_playlistcontainer_is_loaded(pc)) {
+    return next(new Error('Playlist container not loaded'));
+  }
+
+  // Get number of bytes needed to represent the username in a URI
+  var owner = libspotify.sp_playlistcontainer_owner(pc);
+  var username = libspotify.sp_user_canonical_name(owner);
+  var usernameLen = Buffer.byteLength(encodeURIComponent(username));
+
+  // Alloc buffer for playlist URIs
+  var uri = new Buffer('spotify:user:'.length + usernameLen + ':playlist:1v59E2WpkirAgZx4X8bYnj'.length + 17);
+  uri.type = ref.refType(ref.types.char);
+
+  var numPlaylists = libspotify.sp_playlistcontainer_num_playlists(pc);
+  var playlists = [];
+
+  for (var i = 0; i < numPlaylists; i++) {
+    if (libspotify.sp_playlistcontainer_playlist_type(pc, i) !==
+        libspotify.CONSTANTS.sp_playlist_type.SP_PLAYLIST_TYPE_PLAYLIST) {
+      continue;
+    }
+
+    var playlist = libspotify.sp_playlistcontainer_playlist(pc, i);
+    var link = libspotify.sp_link_create_from_playlist(playlist);
+    var len = libspotify.sp_link_as_string(link, uri, uri.length);
+    libspotify.sp_link_release(link);
+    playlists.push(ref.readCString(uri.slice(0, len), 0));
+  }
+
+  res.json({playlists: playlists});
+}
 
 function getTrackUri(track) {
   var uri = new Buffer(37);

@@ -297,6 +297,7 @@ var sp_user = exports.sp_user = voidPtr;
 var sp_userPtr = exports.sp_userPtr = ref.refType(sp_user);
 var sp_track = exports.sp_track = voidPtr;
 var sp_trackPtr = exports.sp_trackPtr = ref.refType(sp_track);
+var TracksArray = ArrayType(sp_trackPtr);
 var sp_playlistcontainer = exports.sp_playlistcontainer = voidPtr;
 var sp_playlistcontainerPtr = exports.sp_playlistcontainerPtr = ref.refType(sp_playlistcontainer);
 var sp_playlist = exports.sp_playlist = voidPtr;
@@ -580,7 +581,7 @@ exports.libspotify = new FFI.Library('libspotify', {
     sp_playlist_get_description: [ref.types.CString, [sp_playlistPtr]],
     sp_playlist_get_image: [ref.types.uchar, [sp_playlistPtr, bytePtr]],
     sp_playlist_has_pending_changes: [ref.types.uchar, [sp_playlistPtr]],
-    sp_playlist_add_tracks: [ref.types.uint32, [sp_playlistPtr, voidPtr, ref.types.int32, ref.types.int32, sp_sessionPtr]],
+    sp_playlist_add_tracks: [ref.types.uint32, [sp_playlistPtr, ref.refType(sp_trackPtr), ref.types.int32, ref.types.int32, sp_sessionPtr]],
     sp_playlist_remove_tracks: [ref.types.uint32, [sp_playlistPtr, voidPtr, ref.types.int32]],
     sp_playlist_reorder_tracks: [ref.types.uint32, [sp_playlistPtr, voidPtr, ref.types.int32, ref.types.int32]],
     sp_playlist_num_subscribers: [ref.types.uint32, [sp_playlistPtr]],

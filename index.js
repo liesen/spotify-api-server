@@ -48,6 +48,7 @@ session_callbacks.logged_out = ffi.Callback('void', [libspotify.sp_sessionPtr], 
   clearTimeout(timeoutId);
   timeoutId.unref();
   server.close();
+  process.exit();
 });
 
 session_callbacks.log_message = ffi.Callback('void', [libspotify.sp_sessionPtr, 'string'], function (session, message) {
