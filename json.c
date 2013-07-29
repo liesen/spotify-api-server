@@ -6,22 +6,6 @@
 
 #include "constants.h"
 
-json_t *track_to_json(sp_track *track, json_t *object) {
-  char uri[kTrackLinkLength];
-  sp_link *link = sp_link_create_from_track(track, 0);
-  sp_link_as_string(link, uri, kTrackLinkLength);
-  sp_link_release(link);
-
-  json_object_set_new(object, "uri", json_string_nocheck(uri));
-
-  if (!sp_track_is_loaded(track))
-    return object;
-
-  const char *name = sp_track_name(track);
-  json_object_set_new(object, "title", json_string_nocheck(name));
-  return object;
-}
-
 json_t *playlist_to_json_set_collaborative(sp_playlist *playlist,
                                            json_t *object) {
   bool collaborative = sp_playlist_is_collaborative(playlist);
