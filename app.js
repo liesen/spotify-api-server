@@ -59,6 +59,24 @@ app.param('playlistUri', function (req, res, next, uri) {
 
 var TracksArray = require('ref-array')(libspotify.sp_trackPtr);
 
+function uriFromPlaylist(playlist) {
+  var buf = new Buffer(512);
+  buf.type = ref.refType(ref.types.char);
+  var link = libspotify.sp_link_create_from_playlist(playlist);
+  var len = libspotify.sp_link_as_string(link, buf, buf.length);
+  libspotify.sp_link_release(link);
+  return ref.readCString();
+}
+
+function uriFromTrack(track) {
+  var buf = new Buffer(512);
+  buf.type = ref.refType(ref.types.char);
+  var link = libspotify.sp_link_create_from_track(track, 0);
+  var len = libspotify.sp_link_as_string(link, buf, buf.length);
+  libspotify.sp_link_release(link);
+  return buf.readCString();
+}
+
 function playlistAsJson(playlist) {
   var owner = libspotify.sp_playlist_owner(playlist);
   var username = libspotify.sp_user_display_name(owner);
@@ -69,15 +87,17 @@ function playlistAsJson(playlist) {
 
   for (var i = 0; i < numTracks; i++) {
     var track = libspotify.sp_playlist_track(playlist, i);
-    tracks.push(getTrackUri(track));
+    tracks.push(uriFromTrack(track));
   }
 
   return {
-    owner: username,
+    uri: uriFromPlaylist(playlist),
     title: libspotify.sp_playlist_name(playlist),
+    owner: username,
     description: libspotify.sp_playlist_get_description(playlist),
-    subscriberCount: libspotify.sp_playlist_num_subscribers(playlist),
-    tracks: tracks
+    tracks: tracks,
+    collaborative: libspotify.sp_playlist_is_collaborative(playlist),
+    subscriberCount: libspotify.sp_playlist_num_subscribers(playlist)
   };
 }
 
@@ -139,15 +159,6 @@ function playlists(pc, req, res, next) {
     return next(new Error('Playlist container not loaded'));
   }
 
-  // Get number of bytes needed to represent the username in a URI
-  var owner = libspotify.sp_playlistcontainer_owner(pc);
-  var username = libspotify.sp_user_canonical_name(owner);
-  var usernameLen = Buffer.byteLength(encodeURIComponent(username));
-
-  // Alloc buffer for playlist URIs
-  var uri = new Buffer('spotify:user:'.length + usernameLen + ':playlist:1v59E2WpkirAgZx4X8bYnj'.length + 17);
-  uri.type = ref.refType(ref.types.char);
-
   var numPlaylists = libspotify.sp_playlistcontainer_num_playlists(pc);
   var playlists = [];
 
@@ -158,22 +169,11 @@ function playlists(pc, req, res, next) {
     }
 
     var playlist = libspotify.sp_playlistcontainer_playlist(pc, i);
-    var link = libspotify.sp_link_create_from_playlist(playlist);
-    var len = libspotify.sp_link_as_string(link, uri, uri.length);
-    libspotify.sp_link_release(link);
-    playlists.push(ref.readCString(uri.slice(0, len), 0));
+    var uri = uriFromPlaylist(playlist);
+    playlists.push(uri);
   }
 
   res.json({playlists: playlists});
-}
-
-function getTrackUri(track) {
-  var uri = new Buffer(37);
-  uri.type = ref.refType(ref.types.char);
-  var link = libspotify.sp_link_create_from_track(track, 0);
-  var len = libspotify.sp_link_as_string(link, uri, uri.length);
-  libspotify.sp_link_release(link);
-  return uri.readCString(0);
 }
 
 app.get('/playlists/:playlistUri', function (req, res, next) {
