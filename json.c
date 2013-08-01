@@ -25,24 +25,16 @@ json_t *playlist_to_json(sp_playlist *playlist, json_t *object) {
                               json_string_nocheck(username));
 
   // URI
-  size_t playlist_uri_len = sizeof("spotify:user:") + sizeof(username) +
-                            sizeof(":playlist:") +
-                            sizeof("284on3DVWeAxWkgVuzZKGt") + 1;
-  char *playlist_uri = malloc(playlist_uri_len);
-
-  if (playlist_uri == NULL)
-    return NULL;
-
+  char playlist_uri[kPlaylistLinkLength];
   sp_link *playlist_link = sp_link_create_from_playlist(playlist);
 
   if (playlist_link == NULL)  // Shouldn't happen; playlist is loaded (?)
     return object;
 
-  sp_link_as_string(playlist_link, playlist_uri, playlist_uri_len);
+  sp_link_as_string(playlist_link, playlist_uri, kPlaylistLinkLength);
   sp_link_release(playlist_link);
   json_object_set_new(object, "uri",
                       json_string_nocheck(playlist_uri));
-  free(playlist_uri);
 
   // Title
   const char *title = sp_playlist_name(playlist);
