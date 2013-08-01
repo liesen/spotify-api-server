@@ -124,7 +124,7 @@ app.post('/playlists', function (req, res, next) {
   var pc = libspotify.sp_session_playlistcontainer(session);
   var playlist = libspotify.sp_playlistcontainer_add_new_playlist(pc, title);
 
-  if (playlist == null) {
+  if (playlist.isNull()) {
     return next(new Error('Unable to create playlist'));
   }
 
