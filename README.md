@@ -29,6 +29,8 @@ and GPL.
     POST /playlist/{uri}/collaborative?enabled=<boolean> -> <playlist>
     POST /playlist/{uri}/patch <- [<track URI>] -> <playlist>
 
+    PUT /playlist/{uri}/name <- <string> -> <playlist>
+
     DELETE /playlist/{uri}/delete -> <playlist>
 
 
